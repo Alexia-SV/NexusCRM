@@ -236,19 +236,19 @@ La contrasena de seed debe definirse en desarrollo y cambiarse antes de cualquie
 
 ### Fase 6 - Modulo empleados/usuarios
 
-- Rehacer formulario de empleados con todos los campos requeridos.
-- Validar CURP, RFC, CLABE, salario, correo y campos obligatorios.
-- Crear empleado.
-- Editar empleado.
-- Desactivar empleado.
-- Eliminar empleado solo si se permite.
-- Crear usuario del sistema opcional al crear empleado.
-- Asignar rol si se crea usuario.
-- Permitir generar contrasena temporal para el usuario del sistema.
-- Permitir capturar contrasena manual si se requiere.
-- Desactivar usuario automaticamente si se desactiva empleado.
-- Conectar lista de empleados al backend.
-- Agregar filtros por estado, area, puesto y busqueda.
+- [x] Rehacer formulario de empleados con todos los campos requeridos.
+- [x] Validar CURP, RFC, NSS, CLABE, salario, correo y campos obligatorios.
+- [x] Crear empleado.
+- [x] Editar empleado.
+- [x] Desactivar empleado.
+- [x] Eliminar empleado solo si se permite.
+- [x] Crear usuario del sistema opcional al crear empleado.
+- [x] Asignar rol si se crea usuario.
+- [x] Permitir generar contrasena temporal para el usuario del sistema.
+- [x] Permitir capturar contrasena manual si se requiere.
+- [x] Desactivar usuario y sus sesiones automaticamente si se desactiva empleado.
+- [x] Conectar lista de empleados al backend.
+- [x] Agregar filtros por estado, area, puesto y busqueda.
 
 ### Fase 7 - Responsividad
 
