@@ -77,7 +77,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto">
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto">
 
       {/* Header */}
       <div className="mb-8">

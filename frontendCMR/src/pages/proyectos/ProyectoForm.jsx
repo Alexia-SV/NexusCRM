@@ -78,7 +78,7 @@ export default function ProyectoForm() {
   }
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto">
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto">
       <div className="flex items-center gap-4 mb-8">
         <button
           onClick={() => navigate('/proyectos')}
@@ -102,7 +102,7 @@ export default function ProyectoForm() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
           {/* Datos generales */}
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 sm:p-6">
             <h2 className="text-sm font-semibold text-slate-700 mb-5 pb-3 border-b border-slate-100">
               Datos generales
             </h2>
@@ -152,7 +152,7 @@ export default function ProyectoForm() {
           </div>
 
           {/* Equipo involucrado */}
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 sm:p-6">
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
               <h2 className="text-sm font-semibold text-slate-700">Equipo involucrado</h2>
               {involucrados.length > 0 && (
@@ -162,7 +162,7 @@ export default function ProyectoForm() {
               )}
             </div>
 
-            <div className="flex gap-3 mb-5">
+            <div className="flex flex-col sm:flex-row gap-3 mb-5">
               <select
                 value={empleadoSel}
                 onChange={(e) => setEmpleadoSel(e.target.value)}
@@ -199,7 +199,7 @@ export default function ProyectoForm() {
                   const colors = ['bg-sky-100 text-sky-700','bg-violet-100 text-violet-700','bg-emerald-100 text-emerald-700','bg-amber-100 text-amber-700']
                   const color  = colors[(emp.nombre.charCodeAt(0) + emp.apellido_paterno.charCodeAt(0)) % colors.length]
                   return (
-                    <div key={inv.empleado_id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                    <div key={inv.empleado_id} className="grid grid-cols-[auto_1fr_auto] sm:flex sm:items-center gap-3 p-3 bg-slate-50 rounded-xl">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${color}`}>
                         {initials}
                       </div>
@@ -212,7 +212,7 @@ export default function ProyectoForm() {
                       <select
                         value={inv.rol}
                         onChange={(e) => actualizarRol(inv.empleado_id, e.target.value)}
-                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white focus:outline-none focus:border-sky-400"
+                        className="col-start-1 col-span-2 sm:col-auto text-xs border border-slate-200 rounded-lg px-2 py-2 text-slate-600 bg-white focus:outline-none focus:border-sky-400"
                       >
                         <option value="colaborador">Colaborador</option>
                         <option value="supervisor">Supervisor</option>
@@ -224,7 +224,7 @@ export default function ProyectoForm() {
                         type="number"
                         value={inv.salario_asignado}
                         onChange={(e) => actualizarSalario(inv.empleado_id, e.target.value)}
-                        className="w-28 text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white focus:outline-none focus:border-sky-400 text-right"
+                        className="w-full sm:w-28 text-xs border border-slate-200 rounded-lg px-2 py-2 text-slate-600 bg-white focus:outline-none focus:border-sky-400 text-right"
                       />
                       <button
                         type="button"
@@ -242,18 +242,18 @@ export default function ProyectoForm() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 pb-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 pb-4">
             <button
               type="button"
               onClick={() => navigate('/proyectos')}
-              className="px-6 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
+              className="w-full sm:w-auto px-6 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-2.5 bg-slate-900 hover:bg-slate-700 disabled:bg-slate-400 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer"
+              className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 hover:bg-slate-700 disabled:bg-slate-400 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer"
             >
               {isSubmitting ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear proyecto'}
             </button>

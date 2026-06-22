@@ -11,6 +11,7 @@ import ProyectoForm from '../pages/proyectos/ProyectoForm'
 import ProyectoDetail from '../pages/proyectos/ProyectoDetail'
 import ProveedoresList from '../pages/proveedores/ProveedoresList'
 import ProveedorForm from '../pages/proveedores/ProveedorForm'
+import PlaceholderModule from '../pages/shared/PlaceholderModule'
 import PrivateLayout from '../components/layout/PrivateLayout'
 import { useAuth } from '../context/AuthContext'
 import { permissions } from '../auth/permissions'
@@ -57,6 +58,9 @@ export default function AppRouter() {
     <Route path="/proveedores" element={<PrivatePage roles={permissions.proveedoresRead}><ProveedoresList /></PrivatePage>} />
     <Route path="/proveedores/nuevo" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
     <Route path="/proveedores/editar/:id" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
+    <Route path="/nominas" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Nóminas" /></PrivatePage>} />
+    <Route path="/insumos" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Insumos" /></PrivatePage>} />
+    <Route path="/reportes" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Reportes" /></PrivatePage>} />
     <Route path="/sin-permiso" element={<ProtectedRoute><Forbidden /></ProtectedRoute>} />
     <Route path="/" element={<Navigate to="/dashboard" replace />} />
     <Route path="*" element={<Navigate to="/dashboard" replace />} />

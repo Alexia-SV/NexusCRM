@@ -252,12 +252,13 @@ La contrasena de seed debe definirse en desarrollo y cambiarse antes de cualquie
 
 ### Fase 7 - Responsividad
 
-- Revisar login en movil, tablet y desktop.
-- Revisar sidebar y bottom nav.
-- Ajustar tablas para movil con cards o scroll controlado.
-- Revisar formularios largos.
-- Revisar modales y botones.
-- Validar que no haya textos cortados ni acciones inaccesibles.
+- [x] Revisar login en movil, tablet y desktop.
+- [x] Revisar sidebar y bottom nav.
+- [x] Ajustar tablas para movil con scroll horizontal controlado.
+- [x] Revisar formularios largos.
+- [x] Revisar modales y botones.
+- [x] Validar que no haya textos cortados ni acciones inaccesibles.
+- [x] Agregar control mostrar/ocultar en todos los campos de contrasena.
 
 ### Fase 8 - Seguridad y reglas de negocio
 

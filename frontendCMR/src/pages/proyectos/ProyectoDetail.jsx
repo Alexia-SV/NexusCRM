@@ -46,10 +46,10 @@ export default function ProyectoDetail() {
   })
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto">
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto">
 
       {/* Header */}
-      <div className="flex items-start gap-4 mb-8">
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4 mb-8">
         <button
           onClick={() => navigate('/proyectos')}
           className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all mt-1"
@@ -70,7 +70,7 @@ export default function ProyectoDetail() {
         </div>
         <button
           onClick={() => navigate(`/proyectos/editar/${proyecto.id}`)}
-          className={`${can(permissions.proyectosWrite) ? 'flex' : 'hidden'} items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition`}
+          className={`${can(permissions.proyectosWrite) ? 'flex' : 'hidden'} w-full sm:w-auto justify-center items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
@@ -94,7 +94,7 @@ export default function ProyectoDetail() {
                 <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Meta</p>
                 <p className="text-sm text-slate-700">{proyecto.meta}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Fecha inicio</p>
                   <p className="text-sm text-slate-700">{formatFecha(proyecto.fecha_inicio)}</p>

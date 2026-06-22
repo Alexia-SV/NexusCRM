@@ -146,7 +146,7 @@ export default function ProveedorForm() {
           </div>
 
           {/* Botones */}
-          <div className="flex items-center gap-3 pb-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 pb-4">
             <button
               type="button"
               onClick={() => navigate('/proveedores')}
