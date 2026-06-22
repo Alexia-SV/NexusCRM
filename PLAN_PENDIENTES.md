@@ -222,14 +222,17 @@ La contrasena de seed debe definirse en desarrollo y cambiarse antes de cualquie
 
 ### Fase 5 - Integracion del frontend con auth real
 
-- Reemplazar login simulado.
-- Crear cliente API con Axios.
-- Guardar access token en memoria.
-- Manejar refresh automatico.
-- Proteger rutas segun sesion.
-- Redirigir segun rol/permisos.
-- Ocultar modulos no permitidos.
-- Ocultar botones no permitidos.
+- [x] Reemplazar login simulado.
+- [x] Crear cliente API con Axios.
+- [x] Guardar access token en memoria.
+- [x] Manejar refresh automatico.
+- [x] Proteger rutas segun sesion.
+- [x] Redirigir segun rol/permisos.
+- [x] Ocultar modulos no permitidos.
+- [x] Ocultar botones no permitidos.
+- [x] Conectar logout real e invalidacion de sesion.
+- [x] Conectar recuperacion y restablecimiento de contrasena.
+- [x] Forzar el cambio de contrasena temporal antes de acceder al CRM.
 
 ### Fase 6 - Modulo empleados/usuarios
 

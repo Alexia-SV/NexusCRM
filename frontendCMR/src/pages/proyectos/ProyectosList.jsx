@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { permissions } from '../../auth/permissions'
 
 const statusConfig = {
   planificacion: { label: 'Planificación', class: 'bg-amber-50 text-amber-700',  dot: 'bg-amber-400' },
@@ -40,6 +42,8 @@ function Avatar({ nombre, apellido, size = 'sm' }) {
 export default function ProyectosList() {
   const navigate  = useNavigate()
   const { proyectos, usuarios, eliminarProyecto } = useApp()
+  const { can } = useAuth()
+  const canWrite = can(permissions.proyectosWrite)
   const [search, setSearch]       = useState('')
   const [filterStatus, setFilter] = useState('todos')
   const [deleteId, setDeleteId]   = useState(null)
@@ -82,7 +86,7 @@ export default function ProyectosList() {
         </div>
         <button
           onClick={() => navigate('/proyectos/nuevo')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer"
+          className={`${canWrite ? 'flex' : 'hidden'} items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -210,7 +214,7 @@ export default function ProyectosList() {
                     </button>
                     <button
                       onClick={() => navigate(`/proyectos/editar/${proyecto.id}`)}
-                      className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                      className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all`}
                       title="Editar"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -219,7 +223,7 @@ export default function ProyectosList() {
                     </button>
                     <button
                       onClick={() => setDeleteId(proyecto.id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all`}
                       title="Eliminar"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

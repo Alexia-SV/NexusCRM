@@ -1,9 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { permissions } from '../../auth/permissions'
 
 export default function Dashboard() {
   const { stats, usuarios, proyectos } = useApp()
+  const { can } = useAuth()
   const navigate = useNavigate()
+  const canReadUsers = can(permissions.usuariosRead)
+  const canWriteUsers = can(permissions.usuariosWrite)
+  const canReadProjects = can(permissions.proyectosRead)
+  const canWriteProjects = can(permissions.proyectosWrite)
 
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -12,6 +19,7 @@ export default function Dashboard() {
   const statCards = [
     {
       label: 'Empleados activos',
+      visible: canReadUsers,
       value: stats.empleadosActivos,
       color: 'text-sky-600 bg-sky-50',
       icon: (
@@ -22,6 +30,7 @@ export default function Dashboard() {
     },
     {
       label: 'Proyectos activos',
+      visible: canReadProjects,
       value: stats.proyectosActivos,
       color: 'text-violet-600 bg-violet-50',
       icon: (
@@ -32,6 +41,7 @@ export default function Dashboard() {
     },
     {
       label: 'Total empleados',
+      visible: canReadUsers,
       value: usuarios.length,
       color: 'text-amber-600 bg-amber-50',
       icon: (
@@ -42,6 +52,7 @@ export default function Dashboard() {
     },
     {
       label: 'Nómina del mes',
+      visible: true,
       value: `$${stats.totalNominasMes.toLocaleString('es-MX')}`,
       color: 'text-emerald-600 bg-emerald-50',
       icon: (
@@ -76,7 +87,7 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-        {statCards.map((stat) => (
+        {statCards.filter((stat) => stat.visible).map((stat) => (
           <div
             key={stat.label}
             className="bg-white rounded-2xl border border-slate-200/60 p-5 flex items-center space-x-4 shadow-sm"
@@ -96,12 +107,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Empleados recientes */}
-        <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+        <div className={`${canReadUsers ? '' : 'hidden'} bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-700">Empleados recientes</h2>
             <button
               onClick={() => navigate('/usuarios')}
-              className="text-xs text-sky-600 hover:text-sky-700 font-medium transition"
+              className={`${canReadUsers ? '' : 'hidden'} text-xs text-sky-600 hover:text-sky-700 font-medium transition`}
             >
               Ver todos →
             </button>
@@ -117,7 +128,7 @@ export default function Dashboard() {
               <p className="text-sm text-slate-500">Sin empleados registrados aún</p>
               <button
                 onClick={() => navigate('/usuarios/nuevo')}
-                className="text-xs text-sky-600 hover:text-sky-700 font-medium mt-2 transition"
+                className={`${canWriteUsers ? '' : 'hidden'} text-xs text-sky-600 hover:text-sky-700 font-medium mt-2 transition`}
               >
                 + Agregar empleado
               </button>
@@ -150,12 +161,12 @@ export default function Dashboard() {
         </div>
 
         {/* Proyectos recientes */}
-        <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+        <div className={`${canReadProjects ? '' : 'hidden'} bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-700">Proyectos recientes</h2>
             <button
               onClick={() => navigate('/proyectos')}
-              className="text-xs text-sky-600 hover:text-sky-700 font-medium transition"
+              className={`${canReadProjects ? '' : 'hidden'} text-xs text-sky-600 hover:text-sky-700 font-medium transition`}
             >
               Ver todos →
             </button>
@@ -171,7 +182,7 @@ export default function Dashboard() {
               <p className="text-sm text-slate-500">Sin proyectos registrados aún</p>
               <button
                 onClick={() => navigate('/proyectos/nuevo')}
-                className="text-xs text-sky-600 hover:text-sky-700 font-medium mt-2 transition"
+                className={`${canWriteProjects ? '' : 'hidden'} text-xs text-sky-600 hover:text-sky-700 font-medium mt-2 transition`}
               >
                 + Crear proyecto
               </button>

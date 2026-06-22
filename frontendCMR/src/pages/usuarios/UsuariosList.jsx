@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext' 
+import { useAuth } from '../../context/AuthContext'
+import { permissions } from '../../auth/permissions'
 
 function Avatar({ nombre, apellido }) {
   const initials = `${nombre[0]}${apellido[0]}`.toUpperCase()
@@ -34,6 +36,8 @@ function StatusBadge({ status }) {
 export default function UsuariosList() {
   const navigate = useNavigate()
   const { usuarios, eliminarUsuario } = useApp()
+  const { can } = useAuth()
+  const canWrite = can(permissions.usuariosWrite)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('todos')
   const [deleteId, setDeleteId] = useState(null)
@@ -66,7 +70,7 @@ export default function UsuariosList() {
         </div>
         <button
           onClick={() => navigate('/usuarios/nuevo')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer"
+          className={`${canWrite ? 'flex' : 'hidden'} items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -156,7 +160,7 @@ export default function UsuariosList() {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => navigate(`/usuarios/editar/${usuario.id}`)}
-                        className="p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all"
+                        className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all`}
                         title="Editar"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -165,7 +169,7 @@ export default function UsuariosList() {
                       </button>
                       <button
                         onClick={() => setDeleteId(usuario.id)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                        className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all`}
                         title="Eliminar"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

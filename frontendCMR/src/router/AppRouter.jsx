@@ -1,5 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from '../pages/auth/Login'
+import ForgotPassword from '../pages/auth/ForgotPassword'
+import ResetPassword from '../pages/auth/ResetPassword'
+import ChangePassword from '../pages/auth/ChangePassword'
 import Dashboard from '../pages/dashboard/Dashboard'
 import UsuariosList from '../pages/usuarios/UsuariosList'
 import UsuarioForm from '../pages/usuarios/UsuarioForm'
@@ -9,43 +12,53 @@ import ProyectoDetail from '../pages/proyectos/ProyectoDetail'
 import ProveedoresList from '../pages/proveedores/ProveedoresList'
 import ProveedorForm from '../pages/proveedores/ProveedorForm'
 import PrivateLayout from '../components/layout/PrivateLayout'
+import { useAuth } from '../context/AuthContext'
+import { permissions } from '../auth/permissions'
 
-function PrivateRoute({ children }) {
-  const token = localStorage.getItem('token_crm')
-  if (!token) return <Navigate to="/login" replace />
+function LoadingSession() {
+  return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">Restaurando sesión...</div>
+}
+
+function ProtectedRoute({ children, roles, allowPasswordChange = false }) {
+  const location = useLocation()
+  const { status, user, can } = useAuth()
+  if (status === 'loading') return <LoadingSession />
+  if (status !== 'authenticated') return <Navigate to="/login" state={{ from: location }} replace />
+  if (user.mustChangePassword && !allowPasswordChange) return <Navigate to="/cambiar-contrasena" replace />
+  if (!user.mustChangePassword && allowPasswordChange && location.pathname === '/cambiar-contrasena') {
+    // El usuario también puede cambiarla voluntariamente desde esta misma ruta.
+  }
+  if (roles && !can(roles)) return <Navigate to="/sin-permiso" replace />
   return children
 }
 
-function PrivatePage({ children }) {
-  return (
-    <PrivateRoute>
-      <PrivateLayout>{children}</PrivateLayout>
-    </PrivateRoute>
-  )
+function PrivatePage({ children, roles }) {
+  return <ProtectedRoute roles={roles}><PrivateLayout>{children}</PrivateLayout></ProtectedRoute>
+}
+
+function Forbidden() {
+  return <PrivateLayout><div className="flex-1 flex flex-col items-center justify-center p-8 text-center"><h1 className="text-2xl font-bold text-slate-900">Acceso no permitido</h1><p className="text-sm text-slate-500 mt-2">Tu rol no tiene permiso para entrar a esta sección.</p></div></PrivateLayout>
 }
 
 export default function AppRouter() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-
-        <Route path="/dashboard"             element={<PrivatePage><Dashboard /></PrivatePage>} />
-        <Route path="/usuarios"              element={<PrivatePage><UsuariosList /></PrivatePage>} />
-        <Route path="/usuarios/nuevo"        element={<PrivatePage><UsuarioForm /></PrivatePage>} />
-        <Route path="/usuarios/editar/:id"   element={<PrivatePage><UsuarioForm /></PrivatePage>} />
-
-        <Route path="/proyectos"             element={<PrivatePage><ProyectosList /></PrivatePage>} />
-        <Route path="/proyectos/nuevo"       element={<PrivatePage><ProyectoForm /></PrivatePage>} />
-        <Route path="/proyectos/editar/:id"  element={<PrivatePage><ProyectoForm /></PrivatePage>} />
-        <Route path="/proyectos/:id"         element={<PrivatePage><ProyectoDetail /></PrivatePage>} />
-
-        <Route path="/proveedores"           element={<PrivatePage><ProveedoresList /></PrivatePage>} />
-        <Route path="/proveedores/nuevo"     element={<PrivatePage><ProveedorForm /></PrivatePage>} />
-        <Route path="/proveedores/editar/:id" element={<PrivatePage><ProveedorForm /></PrivatePage>} />
-
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
-  )
+  return <BrowserRouter><Routes>
+    <Route path="/login" element={<Login />} />
+    <Route path="/recuperar-contrasena" element={<ForgotPassword />} />
+    <Route path="/restablecer-contrasena" element={<ResetPassword />} />
+    <Route path="/cambiar-contrasena" element={<ProtectedRoute allowPasswordChange><ChangePassword /></ProtectedRoute>} />
+    <Route path="/dashboard" element={<PrivatePage roles={permissions.dashboard}><Dashboard /></PrivatePage>} />
+    <Route path="/usuarios" element={<PrivatePage roles={permissions.usuariosRead}><UsuariosList /></PrivatePage>} />
+    <Route path="/usuarios/nuevo" element={<PrivatePage roles={permissions.usuariosWrite}><UsuarioForm /></PrivatePage>} />
+    <Route path="/usuarios/editar/:id" element={<PrivatePage roles={permissions.usuariosWrite}><UsuarioForm /></PrivatePage>} />
+    <Route path="/proyectos" element={<PrivatePage roles={permissions.proyectosRead}><ProyectosList /></PrivatePage>} />
+    <Route path="/proyectos/nuevo" element={<PrivatePage roles={permissions.proyectosWrite}><ProyectoForm /></PrivatePage>} />
+    <Route path="/proyectos/editar/:id" element={<PrivatePage roles={permissions.proyectosWrite}><ProyectoForm /></PrivatePage>} />
+    <Route path="/proyectos/:id" element={<PrivatePage roles={permissions.proyectosRead}><ProyectoDetail /></PrivatePage>} />
+    <Route path="/proveedores" element={<PrivatePage roles={permissions.proveedoresRead}><ProveedoresList /></PrivatePage>} />
+    <Route path="/proveedores/nuevo" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
+    <Route path="/proveedores/editar/:id" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
+    <Route path="/sin-permiso" element={<ProtectedRoute><Forbidden /></ProtectedRoute>} />
+    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+  </Routes></BrowserRouter>
 }

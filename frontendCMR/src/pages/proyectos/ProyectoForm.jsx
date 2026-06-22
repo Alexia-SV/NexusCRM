@@ -28,6 +28,7 @@ export default function ProyectoForm() {
       const proyecto = proyectos.find((p) => p.id === Number(id))
       if (proyecto) {
         reset(proyecto)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setInvolucrados(proyecto.involucrados)
       }
     }
