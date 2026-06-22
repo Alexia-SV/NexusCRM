@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
-    "db:verify": "node scripts/verify-db.js"
+    "db:verify": "node scripts/verify-db.js",
+    "env:secrets": "node scripts/configure-dev-secrets.js"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^9.0.1",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },

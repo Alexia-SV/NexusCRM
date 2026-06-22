@@ -1,6 +1,7 @@
 const express = require('express')
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
+const helmet = require('helmet')
 const { env } = require('./config/env')
 const routes = require('./routes')
 const { notFoundHandler } = require('./middlewares/notFoundHandler')
@@ -8,6 +9,9 @@ const { errorHandler } = require('./middlewares/errorHandler')
 
 const app = express()
 
+app.disable('x-powered-by')
+app.set('trust proxy', 1)
+app.use(helmet())
 app.use(cors({
   origin: env.frontendUrl,
   credentials: true,

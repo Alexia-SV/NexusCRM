@@ -1,3 +1,5 @@
+require('./env')
+
 const { PrismaPg } = require('@prisma/adapter-pg')
 const { PrismaClient } = require('@prisma/client')
 
