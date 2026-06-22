@@ -1,13 +1,125 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  ADMIN     @map("admin")
+  LIDER     @map("lider")
+  OPERATIVO @map("operativo")
+  CONTADOR  @map("contador")
+}
+
+enum Sex {
+  MASCULINO @map("M")
+  FEMENINO  @map("F")
+  OTRO      @map("otro")
+}
+
+enum MaritalStatus {
+  SOLTERO     @map("soltero")
+  CASADO      @map("casado")
+  UNION_LIBRE @map("union_libre")
+  DIVORCIADO  @map("divorciado")
+  VIUDO       @map("viudo")
+  OTRO        @map("otro")
+}
+
+enum ContractType {
+  BASE       @map("base")
+  TEMPORAL   @map("temporal")
+  HONORARIOS @map("honorarios")
+}
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  fullName            String    @map("full_name") @db.VarChar(150)
+  email               String    @unique @db.VarChar(254)
+  passwordHash        String    @map("password_hash")
+  role                Role
+  active              Boolean   @default(true)
+  mustChangePassword  Boolean   @default(true) @map("must_change_password")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(3)
+  registeredAt        DateTime  @default(now()) @map("registered_at") @db.Timestamptz(3)
+  lastAccessAt        DateTime? @map("last_access_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  employee            Employee?
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([role, active])
+  @@map("users")
+}
+
+model Employee {
+  id                   String        @id @default(uuid()) @db.Uuid
+  firstName            String        @map("first_name") @db.VarChar(80)
+  paternalLastName     String        @map("paternal_last_name") @db.VarChar(80)
+  maternalLastName     String?       @map("maternal_last_name") @db.VarChar(80)
+  curp                 String        @unique @db.Char(18)
+  rfc                  String?       @unique @db.VarChar(13)
+  nss                  String?       @unique @db.VarChar(11)
+  birthDate            DateTime      @map("birth_date") @db.Date
+  sex                  Sex
+  maritalStatus        MaritalStatus @map("marital_status")
+  phone                String?       @db.VarChar(20)
+  personalEmail        String?       @unique @map("personal_email") @db.VarChar(254)
+  institutionalEmail   String?       @unique @map("institutional_email") @db.VarChar(254)
+  address              String?
+  position             String        @db.VarChar(100)
+  department           String        @db.VarChar(100)
+  hireDate             DateTime      @map("hire_date") @db.Date
+  contractType         ContractType  @map("contract_type")
+  dailySalary          Decimal       @map("daily_salary") @db.Decimal(12, 2)
+  integratedImssSalary Decimal?      @map("integrated_imss_salary") @db.Decimal(12, 2)
+  bankName             String?       @map("bank_name") @db.VarChar(100)
+  clabe                String?       @unique @db.Char(18)
+  active               Boolean       @default(true)
+  userId               String?       @unique @map("user_id") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([department])
+  @@index([position])
+  @@map("employees")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  userAgent String?   @map("user_agent") @db.VarChar(500)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
