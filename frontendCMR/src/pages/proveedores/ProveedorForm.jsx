@@ -14,17 +14,27 @@ const defaults = {
   tipo_persona: 'moral',
   regimen_fiscal: '',
   curp: '',
+  apellido_paterno: '',
+  apellido_materno: '',
   contacto: '',
   email: '',
   telefono: '',
   direccion: '',
+  colonia: '',
   codigo_postal: '',
-  ciudad_estado: '',
+  ciudad: '',
+  estado_ubicacion: '',
   status: 'prospecto',
   fecha_registro: new Date().toISOString().slice(0, 10),
   ultima_actualizacion: new Date().toISOString().slice(0, 10),
   notas_internas: '',
   registrado_por: 'Administrador Nexus CRM',
+  segmento: '',
+  origen_cliente: '',
+  prioridad: 'media',
+  ejecutivo_asignado: '',
+  limite_credito: '',
+  condiciones_pago: '',
 }
 
 function Section({ title, children }) {
@@ -70,16 +80,18 @@ export default function ProveedorForm() {
         <Field label="Razon social" name="razon_social" register={register} errors={errors} placeholder="Empresa S.A. de C.V." className="sm:col-span-2" rules={{ required: 'La razon social es obligatoria' }}/>
         <Field label="RFC" name="rfc" register={register} errors={errors} placeholder="AAA000000AAA" inputProps={{ maxLength: 13 }} rules={{ required: 'El RFC es obligatorio', minLength: { value: 12, message: 'Minimo 12 caracteres' }, maxLength: { value: 13, message: 'Maximo 13 caracteres' } }}/>
         <Field label="Regimen fiscal" name="regimen_fiscal" register={register} errors={errors} placeholder="General de Ley Personas Morales"/>
-        {tipoPersona === 'fisica' && <Field label="CURP" name="curp" register={register} errors={errors} placeholder="AAAA000000HXXXXXX00" inputProps={{ maxLength: 18 }} rules={{ minLength: { value: 18, message: 'La CURP debe tener 18 caracteres' } }}/>}
+        {tipoPersona === 'fisica' && <><Field label="Apellido paterno" name="apellido_paterno" register={register} errors={errors} placeholder="Apellido paterno"/><Field label="Apellido materno" name="apellido_materno" register={register} errors={errors} placeholder="Apellido materno"/><Field label="CURP" name="curp" register={register} errors={errors} placeholder="AAAA000000HXXXXXX00" inputProps={{ maxLength: 18 }} rules={{ minLength: { value: 18, message: 'La CURP debe tener 18 caracteres' } }}/></>}
       </Section>
 
       <Section title="Contacto y ubicacion">
         <Field label="Nombre de contacto" name="contacto" register={register} errors={errors} placeholder="Nombre del responsable" rules={{ required: 'El contacto es obligatorio' }}/>
         <Field label="Telefono" name="telefono" register={register} errors={errors} placeholder="2221234567" rules={{ required: 'El telefono es obligatorio' }}/>
         <Field label="Correo electronico" name="email" type="email" register={register} errors={errors} placeholder="contacto@empresa.com" className="sm:col-span-2" rules={{ required: 'El correo es obligatorio' }}/>
-        <Field label="Direccion" name="direccion" register={register} errors={errors} placeholder="Calle, numero, colonia" className="sm:col-span-2"/>
+        <Field label="Direccion / calle" name="direccion" register={register} errors={errors} placeholder="Calle y numero" className="sm:col-span-2"/>
+        <Field label="Colonia" name="colonia" register={register} errors={errors} placeholder="Colonia"/>
         <Field label="Codigo postal" name="codigo_postal" register={register} errors={errors} placeholder="72000" inputProps={{ maxLength: 5 }}/>
-        <Field label="Ciudad / Estado" name="ciudad_estado" register={register} errors={errors} placeholder="Puebla, Puebla"/>
+        <Field label="Ciudad" name="ciudad" register={register} errors={errors} placeholder="Puebla"/>
+        <Field label="Estado" name="estado_ubicacion" register={register} errors={errors} placeholder="Puebla"/>
       </Section>
 
       <Section title="Control interno">
@@ -88,6 +100,15 @@ export default function ProveedorForm() {
         <Field label="Fecha de registro" name="fecha_registro" type="date" register={register} errors={errors}/>
         <Field label="Ultima actualizacion" name="ultima_actualizacion" type="date" register={register} errors={errors}/>
         <div className="sm:col-span-2"><label className={labelClass}>Notas internas</label><textarea rows={4} placeholder="Notas comerciales, pagos, restricciones o seguimiento..." className={`${inputClass} resize-none`} {...register('notas_internas')}/></div>
+      </Section>
+
+      <Section title="Propuesta del equipo">
+        <Field label="Segmento" name="segmento" register={register} errors={errors} placeholder="Corporativo, pyme, gobierno..."/>
+        <Field label="Origen del cliente" name="origen_cliente" register={register} errors={errors} placeholder="Referido, web, llamada, evento..."/>
+        <div><label className={labelClass}>Prioridad comercial</label><select className={inputClass} {...register('prioridad')}><option value="baja">Baja</option><option value="media">Media</option><option value="alta">Alta</option><option value="critica">Critica</option></select></div>
+        <Field label="Ejecutivo asignado" name="ejecutivo_asignado" register={register} errors={errors} placeholder="Responsable interno"/>
+        <Field label="Limite de credito" name="limite_credito" type="number" register={register} errors={errors} placeholder="50000"/>
+        <Field label="Condiciones de pago" name="condiciones_pago" register={register} errors={errors} placeholder="Contado, 15 dias, 30 dias..."/>
       </Section>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm"><h2 className="mb-3 text-sm font-semibold text-slate-800">Estados posibles</h2><div className="flex flex-wrap gap-2"><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">Prospecto</span><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Activo</span><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">Inactivo</span><span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">Bloqueado</span></div><div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2"><p>Prospecto: cotizacion enviada, sin proyecto aun.</p><p>Activo: tiene al menos un proyecto en curso.</p><p>Inactivo: sin proyectos activos en 6 meses.</p><p>Bloqueado: problema de pago o conflicto.</p></div></div>

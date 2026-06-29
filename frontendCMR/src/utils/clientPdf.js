@@ -132,6 +132,8 @@ export function downloadClientPdf(client, records, helpers) {
     { label: 'RFC', value: client.rfc },
     { label: 'Tipo de persona', value: client.tipo_persona },
     { label: 'Regimen fiscal', value: client.regimen_fiscal },
+    { label: 'Apellido paterno', value: client.tipo_persona === 'fisica' ? client.apellido_paterno : 'No aplica' },
+    { label: 'Apellido materno', value: client.tipo_persona === 'fisica' ? client.apellido_materno : 'No aplica' },
     { label: 'CURP', value: client.curp || 'Solo persona fisica' },
   ])
   addSection(commands, state, 'Contacto y ubicacion')
@@ -139,9 +141,11 @@ export function downloadClientPdf(client, records, helpers) {
     { label: 'Contacto', value: client.contacto },
     { label: 'Telefono', value: client.telefono },
     { label: 'Correo', value: client.email },
-    { label: 'Direccion', value: client.direccion },
+    { label: 'Direccion / calle', value: client.direccion },
+    { label: 'Colonia', value: client.colonia },
     { label: 'Codigo postal', value: client.codigo_postal },
-    { label: 'Ciudad / Estado', value: client.ciudad_estado },
+    { label: 'Ciudad', value: client.ciudad },
+    { label: 'Estado', value: client.estado_ubicacion },
   ])
   addSection(commands, state, 'Control interno')
   addGrid(commands, state, [
@@ -150,6 +154,15 @@ export function downloadClientPdf(client, records, helpers) {
     { label: 'Ultima actualizacion', value: helpers.formatDate(client.ultima_actualizacion) },
     { label: 'Registrado por', value: client.registrado_por },
     { label: 'Notas internas', value: client.notas_internas },
+  ])
+  addSection(commands, state, 'Propuesta del equipo')
+  addGrid(commands, state, [
+    { label: 'Segmento', value: client.segmento },
+    { label: 'Origen', value: client.origen_cliente },
+    { label: 'Prioridad', value: client.prioridad },
+    { label: 'Ejecutivo asignado', value: client.ejecutivo_asignado },
+    { label: 'Limite de credito', value: client.limite_credito ? helpers.formatMoney(client.limite_credito) : 'Sin registrar' },
+    { label: 'Condiciones de pago', value: client.condiciones_pago },
   ])
   addSection(commands, state, 'Consultas relacionadas')
   records.forEach((record) => addRecord(commands, state, record, helpers.formatDate, helpers.formatMoney))
