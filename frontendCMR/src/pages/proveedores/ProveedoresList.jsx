@@ -1,54 +1,225 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { permissions } from '../../auth/permissions'
+import { downloadClientPdf } from '../../utils/clientPdf'
+
+const statusConfig = {
+  prospecto: { label: 'Prospecto', className: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-400' },
+  activo: { label: 'Activo', className: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  inactivo: { label: 'Inactivo', className: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
+  bloqueado: { label: 'Bloqueado', className: 'bg-rose-50 text-rose-700', dot: 'bg-rose-500' },
+}
+
+const periodOptions = {
+  '2weeks': { days: 14 },
+  '5months': { months: 5 },
+  '1year': { months: 12 },
+  '3years': { months: 36 },
+  all: {},
+}
+
+function normalize(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function statusLabel(status) {
+  return statusConfig[status]?.label || statusConfig.inactivo.label
+}
 
 function StatusBadge({ status }) {
-  return status === 'activo'
-    ? <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Activo
-      </span>
-    : <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Inactivo
-      </span>
+  const config = statusConfig[status] || statusConfig.inactivo
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${config.className}`}><span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />{config.label}</span>
 }
 
 function TipoBadge({ tipo }) {
   return tipo === 'proveedor'
-    ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700">Proveedor</span>
-    : <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">Cliente</span>
+    ? <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Proveedor</span>
+    : <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Cliente</span>
 }
 
 function Avatar({ nombre }) {
-  const initials = nombre.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  const initials = nombre.split(' ').slice(0, 2).map((word) => word[0]).join('').toUpperCase()
   const colors = ['bg-violet-100 text-violet-700', 'bg-amber-100 text-amber-700', 'bg-sky-100 text-sky-700', 'bg-emerald-100 text-emerald-700']
-  const color  = colors[nombre.charCodeAt(0) % colors.length]
-  return (
-    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${color}`}>
-      {initials}
+  const color = colors[nombre.charCodeAt(0) % colors.length]
+  return <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color}`}>{initials}</div>
+}
+
+function formatDate(value) {
+  if (!value) return 'Sin registrar'
+  return new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+function formatMoney(value) {
+  if (value == null || value === '') return 'Sin monto'
+  return Number(value).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+}
+
+function dateFromPeriod(period) {
+  if (period === 'all') return null
+  const option = periodOptions[period]
+  const date = new Date()
+  if (option.days) date.setDate(date.getDate() - option.days)
+  if (option.months) date.setMonth(date.getMonth() - option.months)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function inPeriod(value, period) {
+  const cutoff = dateFromPeriod(period)
+  if (!cutoff) return true
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) && date >= cutoff
+}
+
+function enrichClient(client) {
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    tipo_persona: client.tipo_persona || 'moral',
+    regimen_fiscal: client.regimen_fiscal || 'General de Ley Personas Morales',
+    curp: client.curp || '',
+    codigo_postal: client.codigo_postal || '',
+    ciudad_estado: client.ciudad_estado || '',
+    fecha_registro: client.fecha_registro || '2024-01-15',
+    ultima_actualizacion: client.ultima_actualizacion || today,
+    notas_internas: client.notas_internas || 'Sin notas internas registradas.',
+    registrado_por: client.registrado_por || 'Administrador Nexus CRM',
+    ...client,
+  }
+}
+
+function buildClientRecords({ client, proyectos, cotizaciones }) {
+  const clientName = normalize(client.razon_social)
+  const quoteRecords = cotizaciones
+    .filter((quote) => normalize(quote.cliente) === clientName)
+    .map((quote) => {
+      const project = proyectos.find((item) => item.id === quote.proyecto_id)
+      return {
+        id: `quote-${quote.id}`,
+        category: 'cotizaciones',
+        model: 'proyectos',
+        title: quote.folio,
+        date: quote.fecha,
+        status: quote.status,
+        amount: quote.monto,
+        summary: `${project?.nombre || 'Sin proyecto'} - ${quote.concepto}`,
+      }
+    })
+
+  const projectIds = new Set(quoteRecords.map((record) => {
+    const quote = cotizaciones.find((item) => `quote-${item.id}` === record.id)
+    return quote?.proyecto_id
+  }))
+
+  const projectRecords = proyectos
+    .filter((project) => projectIds.has(project.id))
+    .map((project) => ({
+      id: `project-${project.id}`,
+      category: 'proyectos',
+      model: 'proyectos',
+      title: project.nombre,
+      date: project.fecha_inicio,
+      status: project.status,
+      amount: project.involucrados.reduce((acc, item) => acc + Number(item.salario_asignado || 0), 0),
+      summary: project.objetivo,
+    }))
+
+  const genericRecords = [
+    {
+      id: `client-product-${client.id}`,
+      category: 'productos',
+      model: 'productos',
+      title: client.tipo === 'cliente' ? 'Paquete comercial configurable' : 'Catalogo de proveedor',
+      date: '2026-05-08',
+      status: 'activo',
+      amount: client.tipo === 'cliente' ? 54000 : 28500,
+      summary: 'Registro demo para mostrar consultas por productos o servicios sin depender de proyectos.',
+    },
+    {
+      id: `client-note-${client.id}`,
+      category: 'notas',
+      model: 'clientes',
+      title: 'Seguimiento comercial',
+      date: client.ultima_actualizacion || client.fecha_registro,
+      status: 'registrada',
+      amount: null,
+      summary: client.notas_internas || 'Revision interna de relacion comercial y estado actual.',
+    },
+  ]
+
+  return [...quoteRecords, ...projectRecords, ...genericRecords]
+}
+
+function Field({ label, value }) {
+  return <div><dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</dt><dd className="mt-1 text-sm text-slate-700 break-words">{value || 'Sin registrar'}</dd></div>
+}
+
+function ClientConsultations({ records }) {
+  const [period, setPeriod] = useState('5months')
+  const [category, setCategory] = useState('todos')
+  const [model, setModel] = useState('todos')
+  const filtered = records
+    .filter((record) => category === 'todos' || record.category === category)
+    .filter((record) => model === 'todos' || record.model === model)
+    .filter((record) => inPeriod(record.date, period))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  const total = filtered.reduce((acc, record) => acc + (Number(record.amount) || 0), 0)
+
+  return <section className="border-t border-slate-100 pt-6">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Consultas flexibles del cliente</h3><p className="mt-1 text-sm text-slate-500">Filtra proyectos, cotizaciones, productos o notas asociadas al cliente.</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Demo adaptable</span></div>
+    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-3">
+      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periodo<select value={period} onChange={(event) => setPeriod(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"><option value="2weeks">Ultimas 2 semanas</option><option value="5months">Ultimos 5 meses</option><option value="1year">Ultimo año</option><option value="3years">Ultimos 3 años</option><option value="all">Todo el historial</option></select></label>
+      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo de consulta<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"><option value="todos">Todo</option><option value="proyectos">Proyectos</option><option value="cotizaciones">Cotizaciones</option><option value="productos">Productos / servicios</option><option value="notas">Notas internas</option></select></label>
+      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modelo usado<select value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"><option value="todos">Cualquier modelo</option><option value="proyectos">Gestion por proyectos</option><option value="productos">Gestion por productos/servicios</option><option value="clientes">Control interno de cliente</option></select></label>
     </div>
-  )
+    <div className="my-4 grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Resultados</p><p className="mt-1 text-2xl font-bold text-slate-900">{filtered.length}</p></div><div className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Monto relacionado</p><p className="mt-1 text-lg font-bold text-slate-900">{formatMoney(total)}</p></div><div className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Periodo</p><p className="mt-1 text-sm font-semibold text-slate-700">{period === 'all' ? 'Todo el historial' : period === '3years' ? 'Ultimos 3 años' : period === '1year' ? 'Ultimo año' : period === '5months' ? 'Ultimos 5 meses' : 'Ultimas 2 semanas'}</p></div></div>
+    {filtered.length === 0 ? <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No hay resultados para esta combinacion.</p> : <div className="space-y-3">{filtered.map((record) => <article key={record.id} className="rounded-xl border border-slate-100 p-4"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold text-slate-800">{record.title}</h4><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{record.category}</span></div><p className="mt-1 text-xs text-slate-500">{record.summary}</p></div><div className="text-left sm:text-right"><p className="text-xs text-slate-400">{formatDate(record.date)}</p><p className="text-xs font-semibold text-slate-600">{record.status}</p>{record.amount != null && <p className="text-sm font-bold text-slate-800">{formatMoney(record.amount)}</p>}</div></div></article>)}</div>}
+  </section>
+}
+
+function ClientModal({ rawClient, proyectos, cotizaciones, canWrite, onClose, onEdit, onSuspend }) {
+  const client = enrichClient(rawClient)
+  const records = useMemo(() => buildClientRecords({ client, proyectos, cotizaciones }), [client, proyectos, cotizaciones])
+  const downloadFile = () => downloadClientPdf(client, records, { formatDate, formatMoney })
+
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/55 p-3 sm:p-6" role="dialog" aria-modal="true">
+    <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <header className="flex items-start gap-3 border-b border-slate-100 p-4 sm:p-6"><Avatar nombre={client.razon_social}/><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-bold text-slate-900 sm:text-xl">{client.razon_social}</h2><TipoBadge tipo={client.tipo}/><StatusBadge status={client.status}/></div><p className="mt-1 text-sm text-slate-500">{client.rfc} - {client.ciudad_estado || 'Ubicacion sin registrar'}</p></div><button onClick={onClose} aria-label="Cerrar expediente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path strokeLinecap="round" d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+      <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+        <section><h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500">Identificacion fiscal</h3><dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="ID cliente" value={client.id}/><Field label="Razon social" value={client.razon_social}/><Field label="RFC" value={client.rfc}/><Field label="Tipo de persona" value={client.tipo_persona === 'fisica' ? 'Fisica' : 'Moral'}/><Field label="Regimen fiscal" value={client.regimen_fiscal}/><Field label="CURP" value={client.curp || (client.tipo_persona === 'fisica' ? '' : 'Solo persona fisica')}/></dl></section>
+        <section className="border-t border-slate-100 pt-6"><h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500">Contacto y ubicacion</h3><dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Nombre de contacto" value={client.contacto}/><Field label="Telefono" value={client.telefono}/><Field label="Correo electronico" value={client.email}/><Field label="Direccion" value={client.direccion}/><Field label="Codigo postal" value={client.codigo_postal}/><Field label="Ciudad / Estado" value={client.ciudad_estado}/></dl></section>
+        <section className="border-t border-slate-100 pt-6"><h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500">Control interno</h3><dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Estado" value={statusLabel(client.status)}/><Field label="Fecha de registro" value={formatDate(client.fecha_registro)}/><Field label="Ultima actualizacion" value={formatDate(client.ultima_actualizacion)}/><Field label="Registrado por" value={client.registrado_por}/><Field label="Notas internas" value={client.notas_internas}/></dl></section>
+        <section className="border-t border-slate-100 pt-6"><h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500">Estados posibles</h3><div className="flex flex-wrap gap-2"><StatusBadge status="prospecto"/><StatusBadge status="activo"/><StatusBadge status="inactivo"/><StatusBadge status="bloqueado"/></div><div className="mt-4 grid grid-cols-1 gap-2 text-sm text-slate-500 sm:grid-cols-2"><p>Prospecto: cotizacion enviada, sin proyecto aun.</p><p>Activo: tiene al menos un proyecto en curso.</p><p>Inactivo: sin proyectos activos en 6 meses.</p><p>Bloqueado: problema de pago o conflicto.</p></div></section>
+        <ClientConsultations records={records}/>
+      </div>
+      <footer className="border-t border-slate-100 bg-slate-50 p-4 sm:p-5">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:justify-end">
+          <button onClick={downloadFile} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5h15v-15h-9l-6 6v9Zm6-15v6h-6"/></svg>Descargar PDF</button>
+          {canWrite && <button onClick={onEdit} className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700">Editar</button>}
+          {canWrite && client.status !== 'inactivo' && <button onClick={onSuspend} className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700">Suspender</button>}
+        </div>
+      </footer>
+    </div>
+  </div>
 }
 
 export default function ProveedoresList() {
   const navigate = useNavigate()
-  const { proveedores, eliminarProveedor } = useApp()
+  const { proveedores, proyectos, cotizaciones, editarProveedor, eliminarProveedor } = useApp()
   const { can } = useAuth()
   const canWrite = can(permissions.proveedoresWrite)
-
-  const [search,       setSearch]    = useState('')
-  const [filterTipo,   setFilterTipo]  = useState('todos')
+  const [search, setSearch] = useState('')
+  const [filterTipo, setFilterTipo] = useState('cliente')
   const [filterStatus, setFilterStatus] = useState('todos')
-  const [deleteId,     setDeleteId]   = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
+  const [selected, setSelected] = useState(null)
 
-  const filtered = proveedores.filter((p) => {
-    const matchSearch =
-      p.razon_social.toLowerCase().includes(search.toLowerCase()) ||
-      p.rfc.toLowerCase().includes(search.toLowerCase()) ||
-      p.contacto.toLowerCase().includes(search.toLowerCase())
-    const matchTipo   = filterTipo   === 'todos' || p.tipo   === filterTipo
-    const matchStatus = filterStatus === 'todos' || p.status === filterStatus
+  const filtered = proveedores.map(enrichClient).filter((client) => {
+    const term = normalize(search)
+    const matchSearch = !term || [client.razon_social, client.rfc, client.contacto, client.email, client.ciudad_estado].some((value) => normalize(value).includes(term))
+    const matchTipo = filterTipo === 'todos' || client.tipo === filterTipo
+    const matchStatus = filterStatus === 'todos' || client.status === filterStatus
     return matchSearch && matchTipo && matchStatus
   })
 
@@ -57,199 +228,17 @@ export default function ProveedoresList() {
     setDeleteId(null)
   }
 
-  return (
-    <div className="flex-1 p-4 md:p-8 overflow-y-auto">
+  const suspendClient = (client) => {
+    const updated = { ...client, status: 'inactivo', ultima_actualizacion: new Date().toISOString().slice(0, 10) }
+    editarProveedor(client.id, updated)
+    setSelected(updated)
+  }
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold text-slate-900">Proveedores / Clientes</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {filtered.length} registro{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/proveedores/nuevo')}
-          className={`${canWrite ? 'flex' : 'hidden'} items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm cursor-pointer w-full sm:w-auto justify-center`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Nuevo registro
-        </button>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Buscar por razón social, RFC o contacto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100 transition-all"
-          />
-        </div>
-        <select
-          value={filterTipo}
-          onChange={(e) => setFilterTipo(e.target.value)}
-          className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
-        >
-          <option value="todos">Todos los tipos</option>
-          <option value="proveedor">Proveedores</option>
-          <option value="cliente">Clientes</option>
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
-        >
-          <option value="todos">Todos los estados</option>
-          <option value="activo">Activos</option>
-          <option value="inactivo">Inactivos</option>
-        </select>
-      </div>
-
-      {/* Tabla desktop / Cards móvil */}
-      {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016 2.993 2.993 0 0 0 2.25-1.016 3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z" />
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-slate-600">No se encontraron registros</p>
-          <p className="text-xs text-slate-400 mt-1">Intenta con otro término o agrega un nuevo registro</p>
-        </div>
-      ) : (
-        <>
-          {/* Cards en móvil */}
-          <div className="md:hidden space-y-3">
-            {filtered.map((p) => (
-              <div key={p.id} className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar nombre={p.razon_social} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{p.razon_social}</p>
-                      <p className="text-xs text-slate-400 font-mono">{p.rfc}</p>
-                    </div>
-                  </div>
-                  <TipoBadge tipo={p.tipo} />
-                </div>
-                <div className="space-y-1.5 mb-3">
-                  <p className="text-xs text-slate-500"><span className="font-medium text-slate-700">Contacto:</span> {p.contacto}</p>
-                  <p className="text-xs text-slate-500"><span className="font-medium text-slate-700">Email:</span> {p.email}</p>
-                  <p className="text-xs text-slate-500"><span className="font-medium text-slate-700">Tel:</span> {p.telefono}</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <StatusBadge status={p.status} />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => navigate(`/proveedores/editar/${p.id}`)}
-                      className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all`}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setDeleteId(p.id)}
-                      className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all`}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Tabla en desktop */}
-          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <th className="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-6 py-3.5">Razón Social</th>
-                  <th className="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-3.5">RFC</th>
-                  <th className="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-3.5">Contacto</th>
-                  <th className="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-3.5">Tipo</th>
-                  <th className="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-3.5">Estado</th>
-                  <th className="text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-6 py-3.5">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar nombre={p.razon_social} />
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800">{p.razon_social}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{p.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="text-xs font-mono text-slate-500">{p.rfc}</span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="text-sm text-slate-600">{p.contacto}</p>
-                      <p className="text-xs text-slate-400">{p.telefono}</p>
-                    </td>
-                    <td className="px-4 py-4"><TipoBadge tipo={p.tipo} /></td>
-                    <td className="px-4 py-4"><StatusBadge status={p.status} /></td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/proveedores/editar/${p.id}`)}
-                          className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all`}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(p.id)}
-                          className={`${canWrite ? '' : 'hidden'} p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all`}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {/* Modal eliminar */}
-      {deleteId && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-6 max-w-sm w-full max-h-[calc(100dvh-2rem)] overflow-y-auto">
-            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4 mx-auto">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-rose-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-bold text-slate-800 text-center mb-1">¿Eliminar registro?</h3>
-            <p className="text-sm text-slate-500 text-center mb-6">Esta acción no se puede deshacer.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer">Cancelar</button>
-              <button onClick={() => handleDelete(deleteId)} className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-xl transition cursor-pointer">Sí, eliminar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  return <div className="flex-1 overflow-y-auto p-4 md:p-8">
+    <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center md:mb-8"><div><h1 className="text-xl font-bold text-slate-900 md:text-2xl">Clientes / Proveedores</h1><p className="mt-1 text-sm text-slate-500">{filtered.length} registro{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}</p></div><button onClick={() => navigate('/proveedores/nuevo')} className={`${canWrite ? 'flex' : 'hidden'} w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-slate-700 sm:w-auto`}>+ Nuevo cliente</button></div>
+    <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]"><input type="text" placeholder="Buscar por razon social, RFC, contacto o ciudad..." value={search} onChange={(event) => setSearch(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-sky-400 focus:outline-none focus:ring-4 focus:ring-sky-100"/><select value={filterTipo} onChange={(event) => setFilterTipo(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700"><option value="todos">Todos los tipos</option><option value="cliente">Clientes</option><option value="proveedor">Proveedores</option></select><select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700"><option value="todos">Todos los estados</option><option value="prospecto">Prospectos</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option><option value="bloqueado">Bloqueados</option></select></div>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{filtered.length === 0 ? <p className="py-16 text-center text-sm text-slate-500">No se encontraron clientes.</p> : <table className="w-full min-w-[860px]"><thead><tr className="border-b border-slate-100 bg-slate-50"><th className="px-6 py-3 text-left text-xs text-slate-500">Cliente</th><th className="px-4 py-3 text-left text-xs text-slate-500">RFC</th><th className="px-4 py-3 text-left text-xs text-slate-500">Contacto</th><th className="px-4 py-3 text-left text-xs text-slate-500">Ubicacion</th><th className="px-4 py-3 text-left text-xs text-slate-500">Tipo</th><th className="px-4 py-3 text-left text-xs text-slate-500">Estado</th><th className="px-6 py-3 text-right text-xs text-slate-500">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((client) => <tr key={client.id} className="hover:bg-slate-50"><td className="px-6 py-4"><button onClick={() => setSelected(client)} className="flex items-center gap-3 text-left"><Avatar nombre={client.razon_social}/><span><span className="block text-sm font-semibold text-slate-800">{client.razon_social}</span><span className="block text-xs text-slate-400">{client.email}</span></span></button></td><td className="px-4 py-4 text-xs font-mono text-slate-500">{client.rfc}</td><td className="px-4 py-4"><p className="text-sm text-slate-700">{client.contacto}</p><p className="text-xs text-slate-400">{client.telefono}</p></td><td className="px-4 py-4"><p className="text-sm text-slate-700">{client.ciudad_estado || 'Sin ubicacion'}</p><p className="text-xs text-slate-400">{client.codigo_postal || 'Sin CP'}</p></td><td className="px-4 py-4"><TipoBadge tipo={client.tipo}/></td><td className="px-4 py-4"><StatusBadge status={client.status}/></td><td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setSelected(client)} className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700">Ver</button>{canWrite && <button onClick={() => navigate(`/proveedores/editar/${client.id}`)} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Editar</button>}{canWrite && <button onClick={() => setDeleteId(client.id)} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">Eliminar</button>}</div></td></tr>)}</tbody></table>}</div>
+    {selected && <ClientModal rawClient={selected} proyectos={proyectos} cotizaciones={cotizaciones} canWrite={canWrite} onClose={() => setSelected(null)} onEdit={() => navigate(`/proveedores/editar/${selected.id}`)} onSuspend={() => suspendClient(selected)}/>}
+    {deleteId && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"><h3 className="text-base font-bold text-slate-800">Eliminar registro</h3><p className="mt-2 text-sm text-slate-500">Esta accion no se puede deshacer.</p><div className="mt-6 flex gap-3"><button onClick={() => setDeleteId(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-slate-600">Cancelar</button><button onClick={() => handleDelete(deleteId)} className="flex-1 rounded-xl bg-rose-500 py-2.5 text-sm font-medium text-white">Eliminar</button></div></div></div>}
+  </div>
 }
