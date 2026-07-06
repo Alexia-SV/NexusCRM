@@ -17,6 +17,9 @@ export const permissions = {
   proyectosWrite: [ROLES.ADMIN, ROLES.LIDER],
   proveedoresRead: Object.values(ROLES),
   proveedoresWrite: [ROLES.ADMIN, ROLES.LIDER],
+  nominasRead: Object.values(ROLES),
+  nominasWrite: [ROLES.ADMIN, ROLES.CONTADOR],
+  nominasConfig: [ROLES.ADMIN],
 }
 
 export function hasRole(user, allowedRoles) {

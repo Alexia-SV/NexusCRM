@@ -25,7 +25,7 @@ const navItems = [
   { label: 'Usuarios', to: '/usuarios', icon: 'users', roles: permissions.usuariosRead, primary: true },
   { label: 'Proyectos', to: '/proyectos', icon: 'projects', roles: permissions.proyectosRead, primary: true },
   { label: 'Proveedores', to: '/proveedores', icon: 'providers', roles: permissions.proveedoresRead, primary: true },
-  { label: 'Nóminas', to: '/nominas', icon: 'payroll', roles: permissions.dashboard },
+  { label: 'Nóminas', to: '/nominas', icon: 'payroll', roles: permissions.nominasRead },
   { label: 'Insumos', to: '/insumos', icon: 'supplies', roles: permissions.dashboard },
   { label: 'Reportes', to: '/reportes', icon: 'reports', roles: permissions.dashboard },
 ]

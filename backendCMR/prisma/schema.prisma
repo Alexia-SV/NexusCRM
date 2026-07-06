@@ -34,6 +34,19 @@ enum ContractType {
   HONORARIOS @map("honorarios")
 }
 
+enum PayrollStatus {
+  BORRADOR   @map("borrador")
+  EN_PROCESO @map("en_proceso")
+  PAGADA     @map("pagada")
+  CANCELADA  @map("cancelada")
+}
+
+enum PeriodType {
+  SEMANAL   @map("semanal")
+  QUINCENAL @map("quincenal")
+  MENSUAL   @map("mensual")
+}
+
 model User {
   id                  String    @id @default(uuid()) @db.Uuid
   fullName            String    @map("full_name") @db.VarChar(150)
@@ -51,6 +64,7 @@ model User {
   employee            Employee?
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  payrolls            Payroll[]
 
   @@index([role, active])
   @@map("users")
@@ -79,17 +93,133 @@ model Employee {
   integratedImssSalary Decimal?      @map("integrated_imss_salary") @db.Decimal(12, 2)
   bankName             String?       @map("bank_name") @db.VarChar(100)
   clabe                String?       @unique @db.Char(18)
+  afore                String?       @db.VarChar(100)
   active               Boolean       @default(true)
   userId               String?       @unique @map("user_id") @db.Uuid
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  payrollReceipts PayrollReceipt[]
 
   @@index([active])
   @@index([department])
   @@index([position])
   @@map("employees")
+}
+
+// Parametros fiscales/prestaciones configurables (una sola fila activa).
+// Cumple la regla: los porcentajes de IMSS/ISR no deben estar hardcodeados.
+model PayrollConfig {
+  id                    String   @id @default(uuid()) @db.Uuid
+  umaDaily              Decimal  @map("uma_daily") @db.Decimal(10, 2)
+  imssEnfMatRate        Decimal  @map("imss_enf_mat_rate") @db.Decimal(6, 4)
+  imssInvVidaRate       Decimal  @map("imss_inv_vida_rate") @db.Decimal(6, 4)
+  imssCesVejezRate      Decimal  @map("imss_ces_vejez_rate") @db.Decimal(6, 4)
+  infonavitEmployerRate Decimal  @map("infonavit_employer_rate") @db.Decimal(6, 4)
+  aguinaldoDays         Int      @map("aguinaldo_days")
+  vacationDays          Int      @map("vacation_days")
+  primaVacacionalRate   Decimal  @map("prima_vacacional_rate") @db.Decimal(6, 4)
+  fondoAhorroRate       Decimal  @map("fondo_ahorro_rate") @db.Decimal(6, 4)
+  integrationFactor     Decimal  @map("integration_factor") @db.Decimal(8, 6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("payroll_config")
+}
+
+// Tablas del ISR por periodo (SAT). Editable desde BD, sin tocar codigo.
+model IsrBracket {
+  id         String     @id @default(uuid()) @db.Uuid
+  period     PeriodType
+  lowerLimit Decimal    @map("lower_limit") @db.Decimal(12, 2)
+  fixedFee   Decimal    @map("fixed_fee") @db.Decimal(12, 2)
+  rate       Decimal    @db.Decimal(6, 2)
+  sortOrder  Int        @map("sort_order")
+
+  @@index([period, sortOrder])
+  @@map("isr_brackets")
+}
+
+// Cabecera: una corrida de nomina por periodo que agrupa varios recibos.
+model Payroll {
+  id              String        @id @default(uuid()) @db.Uuid
+  folio           String        @unique @db.VarChar(30)
+  periodType      PeriodType    @map("period_type")
+  periodStart     DateTime      @map("period_start") @db.Date
+  periodEnd       DateTime      @map("period_end") @db.Date
+  paymentDate     DateTime      @map("payment_date") @db.Date
+  status          PayrollStatus @default(BORRADOR)
+  applySavingsFund Boolean      @default(false) @map("apply_savings_fund")
+  totalGross      Decimal       @default(0) @map("total_gross") @db.Decimal(14, 2)
+  totalDeductions Decimal       @default(0) @map("total_deductions") @db.Decimal(14, 2)
+  totalNet        Decimal       @default(0) @map("total_net") @db.Decimal(14, 2)
+  notes           String?
+  createdById     String?       @map("created_by_id") @db.Uuid
+  createdByName   String?       @map("created_by_name") @db.VarChar(200)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  receipts  PayrollReceipt[]
+
+  @@index([status])
+  @@index([paymentDate])
+  @@map("payrolls")
+}
+
+// Recibo por empleado dentro de una nomina. Guarda snapshot y desglose completo.
+model PayrollReceipt {
+  id        String  @id @default(uuid()) @db.Uuid
+  payrollId String  @map("payroll_id") @db.Uuid
+  payroll   Payroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  employeeId String   @map("employee_id") @db.Uuid
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  // Snapshot del empleado al generar el recibo (integridad historica).
+  employeeName String       @map("employee_name") @db.VarChar(200)
+  curp         String       @db.Char(18)
+  rfc          String?      @db.VarChar(13)
+  nss          String?      @db.VarChar(11)
+  clabe        String?      @db.Char(18)
+  afore        String?      @db.VarChar(100)
+  position     String       @db.VarChar(100)
+  department   String       @db.VarChar(100)
+  contractType ContractType @map("contract_type")
+
+  workedDays  Int     @map("worked_days")
+  absentDays  Int     @default(0) @map("absent_days")
+  dailySalary Decimal @map("daily_salary") @db.Decimal(12, 2)
+  sbc         Decimal @db.Decimal(12, 2)
+
+  // Percepciones
+  baseSalary            Decimal @map("base_salary") @db.Decimal(12, 2)
+  aguinaldoProportional Decimal @default(0) @map("aguinaldo_proportional") @db.Decimal(12, 2)
+  vacationProportional  Decimal @default(0) @map("vacation_proportional") @db.Decimal(12, 2)
+  vacationBonus         Decimal @default(0) @map("vacation_bonus") @db.Decimal(12, 2)
+  extraPerceptions      Decimal @default(0) @map("extra_perceptions") @db.Decimal(12, 2)
+  totalPerceptions      Decimal @map("total_perceptions") @db.Decimal(12, 2)
+
+  // Deducciones
+  imssEnfMat      Decimal    @default(0) @map("imss_enf_mat") @db.Decimal(12, 2)
+  imssInvVida     Decimal    @default(0) @map("imss_inv_vida") @db.Decimal(12, 2)
+  imssCesVejez    Decimal    @default(0) @map("imss_ces_vejez") @db.Decimal(12, 2)
+  imssTotal       Decimal    @default(0) @map("imss_total") @db.Decimal(12, 2)
+  isrWithholding  Decimal    @default(0) @map("isr_withholding") @db.Decimal(12, 2)
+  isrTable        PeriodType @map("isr_table")
+  infonavit       Decimal    @default(0) @db.Decimal(12, 2)
+  savingsFund     Decimal    @default(0) @map("savings_fund") @db.Decimal(12, 2)
+  otherDeductions Decimal    @default(0) @map("other_deductions") @db.Decimal(12, 2)
+  totalDeductions Decimal    @map("total_deductions") @db.Decimal(12, 2)
+
+  netPay       Decimal  @map("net_pay") @db.Decimal(12, 2)
+  pdfGenerated Boolean  @default(false) @map("pdf_generated")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([payrollId, employeeId])
+  @@index([employeeId])
+  @@map("payroll_receipts")
 }
 
 model RefreshToken {

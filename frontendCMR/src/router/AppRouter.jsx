@@ -11,6 +11,10 @@ import ProyectoForm from '../pages/proyectos/ProyectoForm'
 import ProyectoDetail from '../pages/proyectos/ProyectoDetail'
 import ProveedoresList from '../pages/proveedores/ProveedoresList'
 import ProveedorForm from '../pages/proveedores/ProveedorForm'
+import NominasList from '../pages/nominas/NominasList'
+import NominaForm from '../pages/nominas/NominaForm'
+import NominaDetail from '../pages/nominas/NominaDetail'
+import NominaConfig from '../pages/nominas/NominaConfig'
 import PlaceholderModule from '../pages/shared/PlaceholderModule'
 import PrivateLayout from '../components/layout/PrivateLayout'
 import { useAuth } from '../context/AuthContext'
@@ -58,7 +62,11 @@ export default function AppRouter() {
     <Route path="/proveedores" element={<PrivatePage roles={permissions.proveedoresRead}><ProveedoresList /></PrivatePage>} />
     <Route path="/proveedores/nuevo" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
     <Route path="/proveedores/editar/:id" element={<PrivatePage roles={permissions.proveedoresWrite}><ProveedorForm /></PrivatePage>} />
-    <Route path="/nominas" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Nóminas" /></PrivatePage>} />
+    <Route path="/nominas" element={<PrivatePage roles={permissions.nominasRead}><NominasList /></PrivatePage>} />
+    <Route path="/nominas/nueva" element={<PrivatePage roles={permissions.nominasWrite}><NominaForm /></PrivatePage>} />
+    <Route path="/nominas/configuracion" element={<PrivatePage roles={permissions.nominasConfig}><NominaConfig /></PrivatePage>} />
+    <Route path="/nominas/editar/:id" element={<PrivatePage roles={permissions.nominasWrite}><NominaForm /></PrivatePage>} />
+    <Route path="/nominas/:id" element={<PrivatePage roles={permissions.nominasRead}><NominaDetail /></PrivatePage>} />
     <Route path="/insumos" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Insumos" /></PrivatePage>} />
     <Route path="/reportes" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Reportes" /></PrivatePage>} />
     <Route path="/sin-permiso" element={<ProtectedRoute><Forbidden /></ProtectedRoute>} />

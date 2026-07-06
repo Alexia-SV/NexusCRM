@@ -132,10 +132,17 @@ async function deactivate(id) {
 async function remove(id) {
   const current = await prisma.employee.findUnique({ where: { id } })
   if (!current) throw new AppError('Employee not found', 404, 'EMPLOYEE_NOT_FOUND')
-  await prisma.$transaction(async (tx) => {
-    await tx.employee.delete({ where: { id } })
-    if (current.userId) await tx.user.delete({ where: { id: current.userId } })
-  })
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.employee.delete({ where: { id } })
+      if (current.userId) await tx.user.delete({ where: { id: current.userId } })
+    })
+  } catch (error) {
+    if (error.code === 'P2003') {
+      throw new AppError('Cannot delete: the employee has payroll receipts. Deactivate the employee instead.', 409, 'EMPLOYEE_HAS_HISTORY')
+    }
+    throw error
+  }
 }
 
 module.exports = { list, getById, create, update, deactivate, remove }

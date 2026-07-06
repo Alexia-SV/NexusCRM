@@ -28,6 +28,7 @@ const employeeFields = {
   integratedImssSalary: optionalNumber,
   bankName: optionalText(100),
   clabe: z.preprocess((value) => value === '' ? undefined : value, z.string().regex(/^\d{18}$/, 'CLABE must contain 18 digits').optional()),
+  afore: optionalText(100),
   active: z.boolean().default(true),
   systemUser: z.object({
     enabled: z.boolean(),

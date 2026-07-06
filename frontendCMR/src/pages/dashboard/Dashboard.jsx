@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { permissions } from '../../auth/permissions'
+import { listPayrolls } from '../../services/payroll'
 
 export default function Dashboard() {
   const { stats, usuarios, proyectos } = useApp()
@@ -15,6 +17,21 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString('es-MX', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   })
+
+  const [nextPayroll, setNextPayroll] = useState(null)
+  useEffect(() => {
+    let active = true
+    listPayrolls().then((list) => {
+      if (!active) return
+      const now = new Date(); now.setHours(0, 0, 0, 0)
+      const usable = list.filter((payroll) => payroll.status !== 'CANCELADA')
+      const upcoming = usable.filter((payroll) => new Date(payroll.paymentDate) >= now).sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate))
+      setNextPayroll(upcoming[0] || usable[0] || null)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  const formatPayDate = (value) => new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
 
   const statCards = [
     {
@@ -102,6 +119,27 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Próxima nómina */}
+      {nextPayroll && (
+        <div onClick={() => navigate(`/nominas/${nextPayroll.id}`)} className="mb-8 flex cursor-pointer flex-col gap-3 rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm transition hover:shadow-md sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="rounded-xl bg-sky-50 p-3 text-sky-600">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Próxima nómina · <span className="font-mono">{nextPayroll.folio}</span></p>
+              <p className="text-lg font-bold text-slate-900">Pago el {formatPayDate(nextPayroll.paymentDate)}</p>
+            </div>
+          </div>
+          <div className="sm:text-right">
+            <p className="text-[10px] uppercase tracking-wider text-slate-400">Monto total estimado</p>
+            <p className="text-2xl font-bold text-emerald-600">${Number(nextPayroll.totalNet).toLocaleString('es-MX')}</p>
+          </div>
+        </div>
+      )}
 
       {/* Recientes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

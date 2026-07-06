@@ -27,7 +27,7 @@ const defaults = {
   firstName: '', paternalLastName: '', maternalLastName: '', curp: '', rfc: '', nss: '',
   birthDate: '', sex: 'MASCULINO', maritalStatus: 'SOLTERO', phone: '', personalEmail: '',
   institutionalEmail: '', address: '', position: '', department: '', hireDate: '',
-  contractType: 'BASE', dailySalary: '', integratedImssSalary: '', bankName: '', otherBankName: '', clabe: '', active: true,
+  contractType: 'BASE', dailySalary: '', integratedImssSalary: '', bankName: '', otherBankName: '', clabe: '', afore: '', active: true,
   systemUser: { enabled: false, email: '', role: 'OPERATIVO', passwordMode: 'auto', password: '' },
 }
 
@@ -90,7 +90,7 @@ export default function UsuarioForm() {
     getEmployee(id).then((employee) => {
       setHasExistingUser(Boolean(employee.user))
       const savedBank = employee.bankName || ''
-      reset({ ...employee, birthDate: employee.birthDate.slice(0, 10), hireDate: employee.hireDate.slice(0, 10), maternalLastName: employee.maternalLastName || '', rfc: employee.rfc || '', nss: employee.nss || '', phone: employee.phone || '', personalEmail: employee.personalEmail || '', institutionalEmail: employee.institutionalEmail || '', address: employee.address || '', integratedImssSalary: employee.integratedImssSalary ?? '', bankName: banks.includes(savedBank) ? savedBank : savedBank ? otherBankValue : '', otherBankName: banks.includes(savedBank) ? '' : savedBank, clabe: employee.clabe || '', systemUser: { enabled: Boolean(employee.user?.active), email: employee.user?.email || employee.institutionalEmail || '', role: employee.user?.role || 'OPERATIVO', passwordMode: 'auto', password: '' } })
+      reset({ ...employee, birthDate: employee.birthDate.slice(0, 10), hireDate: employee.hireDate.slice(0, 10), maternalLastName: employee.maternalLastName || '', rfc: employee.rfc || '', nss: employee.nss || '', phone: employee.phone || '', personalEmail: employee.personalEmail || '', institutionalEmail: employee.institutionalEmail || '', address: employee.address || '', integratedImssSalary: employee.integratedImssSalary ?? '', bankName: banks.includes(savedBank) ? savedBank : savedBank ? otherBankValue : '', otherBankName: banks.includes(savedBank) ? '' : savedBank, clabe: employee.clabe || '', afore: employee.afore || '', systemUser: { enabled: Boolean(employee.user?.active), email: employee.user?.email || employee.institutionalEmail || '', role: employee.user?.role || 'OPERATIVO', passwordMode: 'auto', password: '' } })
     }).catch((error) => setServerError(getApiError(error, 'No fue posible cargar el empleado.'))).finally(() => setLoading(false))
   }, [id, isEditing, reset])
 
@@ -156,6 +156,7 @@ export default function UsuarioForm() {
         <div><label className={labelClass}>Banco</label><select className={inputClass} {...register('bankName')}><option value="">Selecciona un banco</option>{banks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}<option value={otherBankValue}>Otro</option></select></div>
         {selectedBank === otherBankValue && <Field label="Nombre del otro banco" name="otherBankName" register={register} errors={errors} inputProps={{ maxLength: 100 }} rules={{ validate: (value) => selectedBank !== otherBankValue || value.trim().length > 0 || 'Escribe el nombre del banco' }} />}
         <Field label="CLABE" name="clabe" register={register} errors={errors} inputProps={{ maxLength: 18, inputMode: 'numeric' }} rules={{ pattern: { value: /^\d{18}$/, message: 'La CLABE debe contener exactamente 18 dígitos' } }} />
+        <Field label="AFORE" name="afore" register={register} errors={errors} placeholder="Ej. XXI Banorte, Profuturo..." inputProps={{ maxLength: 100 }} />
         <label className="flex items-center gap-3 text-sm text-slate-700"><input type="checkbox" {...register('active')} /> Empleado activo</label>
       </Section>
       <Section title="Acceso al sistema (opcional)">
