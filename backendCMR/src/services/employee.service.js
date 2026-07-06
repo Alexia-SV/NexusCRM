@@ -41,7 +41,7 @@ function throwKnownError(error) {
 async function list(filters) {
   const where = {
     ...(filters.active && { active: filters.active === 'true' }),
-    ...(filters.department && { department: { equals: filters.department, mode: 'insensitive' } }),
+    ...(filters.department && { department: { startsWith: filters.department, mode: 'insensitive' } }),
     ...(filters.position && { position: { equals: filters.position, mode: 'insensitive' } }),
     ...(filters.search && { OR: [
       { firstName: { contains: filters.search, mode: 'insensitive' } },

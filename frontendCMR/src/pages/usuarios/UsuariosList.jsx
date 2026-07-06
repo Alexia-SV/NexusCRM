@@ -118,9 +118,7 @@ function filterDemoEmployee(filters) {
     demoEmployee.institutionalEmail,
   ].some((value) => normalize(value).includes(query))
   const matchesActive = !filters.active || String(demoEmployee.active) === filters.active
-  const matchesDepartment = !filters.department || normalize(demoEmployee.department).includes(normalize(filters.department))
-  const matchesPosition = !filters.position || normalize(demoEmployee.position).includes(normalize(filters.position))
-  return matchesSearch && matchesActive && matchesDepartment && matchesPosition
+  return matchesSearch && matchesActive
 }
 
 function buildConsultationRecords({ employeeProjects, employeeQuotes, employeeNotes, flexibleRecords, formatMoney }) {
@@ -303,8 +301,6 @@ export default function UsuariosList() {
   const [employees, setEmployees] = useState([])
   const [search, setSearch] = useState('')
   const [active, setActive] = useState('')
-  const [department, setDepartment] = useState('')
-  const [position, setPosition] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
@@ -312,13 +308,13 @@ export default function UsuariosList() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const filters = { search: search || undefined, active: active || undefined, department: department || undefined, position: position || undefined }
+      const filters = { search: search || undefined, active: active || undefined }
       const apiEmployees = await listEmployees(filters)
-      setEmployees(filterDemoEmployee({ search, active, department, position }) ? [...apiEmployees, demoEmployee] : apiEmployees)
+      setEmployees(filterDemoEmployee({ search, active }) ? [...apiEmployees, demoEmployee] : apiEmployees)
     }
     catch (requestError) { setError(getApiError(requestError, 'No fue posible cargar los empleados.')) }
     finally { setLoading(false) }
-  }, [search, active, department, position])
+  }, [search, active])
 
   useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer) }, [load])
 
@@ -330,7 +326,7 @@ export default function UsuariosList() {
   return <div className="flex-1 overflow-y-auto p-4 md:p-8">
     <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-bold text-slate-900">Empleados</h1><p className="mt-1 text-sm text-slate-500">{employees.length} registros encontrados</p></div>{canWrite && <button onClick={() => navigate('/usuarios/nuevo')} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">+ Nuevo empleado</button>}</div>
     {error && <div role="alert" className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
-    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nombre, CURP, puesto o area..." className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"/><select value={active} onChange={(event) => setActive(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"><option value="">Todos los estados</option><option value="true">Activos</option><option value="false">Inactivos</option></select><input value={department} onChange={(event) => setDepartment(event.target.value)} placeholder="Filtrar por area" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"/><input value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Filtrar por puesto" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"/></div>
+    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nombre, CURP, puesto o area..." className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"/><select value={active} onChange={(event) => setActive(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"><option value="">Todos los estados</option><option value="true">Activos</option><option value="false">Inactivos</option></select></div>
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">{loading ? <p className="py-16 text-center text-sm text-slate-500">Cargando empleados...</p> : employees.length === 0 ? <p className="py-16 text-center text-sm text-slate-500">No se encontraron empleados.</p> : <table className="w-full min-w-[700px]"><thead><tr className="border-b border-slate-100 bg-slate-50"><th className="px-6 py-3 text-left text-xs text-slate-500">Empleado</th><th className="px-4 py-3 text-left text-xs text-slate-500">CURP</th><th className="px-4 py-3 text-left text-xs text-slate-500">Puesto / area</th><th className="px-4 py-3 text-left text-xs text-slate-500">Acceso</th><th className="px-4 py-3 text-left text-xs text-slate-500">Estado</th></tr></thead><tbody className="divide-y divide-slate-100">{employees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50"><td className="px-6 py-4"><button onClick={() => setSelected(employee)} aria-label={`Ver expediente de ${fullName(employee)}`} className="group flex items-center gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-700 ring-sky-200 transition group-hover:ring-4">{initials(employee)}</span><span><span className="block text-sm font-semibold text-slate-800 group-hover:text-sky-700">{fullName(employee)}</span><span className="block text-xs text-slate-400">{employee.institutionalEmail || employee.personalEmail || 'Sin correo'}</span></span></button></td><td className="px-4 py-4 text-xs font-mono text-slate-500">{employee.curp}</td><td className="px-4 py-4"><p className="text-sm text-slate-700">{employee.position}</p><p className="text-xs text-slate-400">{employee.department}</p></td><td className="px-4 py-4 text-xs text-slate-500">{employee.user ? `${employee.user.role} - ${employee.user.active ? 'activo' : 'inactivo'}` : 'Sin usuario'}</td><td className="px-4 py-4"><StatusBadge active={employee.active}/></td></tr>)}</tbody></table>}</div>
     {selected && <EmployeeModal employee={selected} canWrite={canWrite} onClose={() => setSelected(null)} onEdit={() => navigate(`/usuarios/editar/${selected.id}`)} onDeactivate={deactivate} usuarios={usuarios} proyectos={proyectos} cotizaciones={cotizaciones} notasInternas={notasInternas} consultasFlexibles={consultasFlexibles} crearNotaInterna={crearNotaInterna}/>}
   </div>
