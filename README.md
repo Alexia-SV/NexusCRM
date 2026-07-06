@@ -141,6 +141,7 @@ npm run db:verify
 | ------------------------- | --------------------------------------------------------------- |
 | `npm run dev`             | API con recarga en caliente (nodemon)                           |
 | `npm start`               | API en modo producción                                          |
+| `npm test`                | Ejecuta las pruebas del módulo de nómina (Node test runner)     |
 | `npm run env:secrets`     | Genera los secretos JWT en `.env`                               |
 | `npm run prisma:generate` | Genera el cliente de Prisma                                     |
 | `npm run prisma:migrate`  | Crea/aplica migraciones en desarrollo (interactivo)             |
@@ -157,6 +158,22 @@ npm run db:verify
 | `npm run build`   | Compila para producción              |
 | `npm run preview` | Sirve la build de producción         |
 | `npm run lint`    | Ejecuta ESLint                       |
+
+---
+
+## Pruebas
+
+El módulo de nómina incluye una suite con el runner nativo de Node (sin dependencias extra):
+
+```bash
+cd backendCMR
+npm test
+```
+
+- **Pruebas unitarias** (`tests/payroll.calc.test.js`): validan el cálculo puro — redondeo, SBC, tramos de ISR, IMSS en 3 cuotas, percepciones de ley y la identidad `neto = percepciones − deducciones`. No requieren base de datos.
+- **Pruebas de integración** (`tests/payroll.service.test.js`): validan el flujo completo contra la base de datos — generación de un recibo por empleado activo, cuadre de totales, idempotencia, recálculo al editar, transiciones de estado, bloqueo al pagar y borrado en cascada. Crean y eliminan sus propios datos (no tocan las nóminas demo).
+
+> Requiere la base de datos migrada y sembrada (`npm run prisma:seed`). Las pruebas de integración usan la base de datos configurada en `.env`; para no mezclar con datos reales puedes apuntar `DATABASE_URL` a una base de pruebas.
 
 ---
 
