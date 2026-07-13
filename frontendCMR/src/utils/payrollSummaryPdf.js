@@ -153,6 +153,9 @@ function buildSummaryPages(payroll) {
   ops.push(rightText(money(payroll.totalDeductions), COLS[5].right, y, { size: 9, bold: true, color: '186 230 253' }))
   ops.push(rightText(money(payroll.totalNet), COLS[6].right, y, { size: 9, bold: true, color: '255 255 255' }))
 
+  y -= 26
+  ops.push(text(`Costo patronal de la corrida (aportaciones del empleador, no afectan el neto): ${money(payroll.totalEmployerCost)}`, PAGE.margin, y, { size: 8.5, color: COLORS.muted }))
+
   pages.push(ops)
   return pages
 }

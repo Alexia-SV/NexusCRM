@@ -1,6 +1,7 @@
 // Datos de prueba de nomina que concuerdan con los empleados ya registrados.
-// Genera varias corridas (los 4 estados, quincenal y mensual) usando la logica
-// real del servicio, por lo que los montos quedan consistentes.
+// Genera un historico 2024-2026 (para reportes mensual/anual/bimestral), con los
+// 4 estados, quincenal y mensual, e incluye un escenario de INCAPACIDAD.
+// Usa la logica real del servicio, por lo que los montos quedan consistentes.
 //
 // Uso:
 //   node scripts/seed-payroll-demo.js          -> crea si no hay nominas
@@ -15,7 +16,6 @@ const payroll = require('../src/services/payroll.service')
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
-// AFORE por empleado (se asigna si esta vacio) para completar el expediente.
 const AFORES = {
   'Ana López Pérez': 'XXI Banorte',
   'José Hernández Cruz': 'Profuturo',
@@ -27,8 +27,24 @@ function fullName(employee) {
   return [employee.firstName, employee.paternalLastName, employee.maternalLastName].filter(Boolean).join(' ')
 }
 
-function receiptFor(payrollData, name) {
-  return payrollData.receipts.find((receipt) => receipt.employeeName === name)
+function pad(n) {
+  return String(n).padStart(2, '0')
+}
+
+// Crea una nomina y la lleva al estado final indicado, aplicando ediciones por
+// recibo (mientras esta en BORRADOR) antes de cambiar el estado.
+async function makePayroll({ periodType, start, end, pay, savings = false, notes, finalStatus = 'PAGADA', edits }, user) {
+  let result = await payroll.create({ periodType, periodStart: start, periodEnd: end, paymentDate: pay, applySavingsFund: savings, notes }, user)
+  if (edits) await edits(result)
+  if (finalStatus === 'PAGADA') {
+    await payroll.changeStatus(result.id, 'EN_PROCESO')
+    result = await payroll.changeStatus(result.id, 'PAGADA')
+  } else if (finalStatus === 'EN_PROCESO') {
+    result = await payroll.changeStatus(result.id, 'EN_PROCESO')
+  } else if (finalStatus === 'CANCELADA') {
+    result = await payroll.changeStatus(result.id, 'CANCELADA')
+  }
+  return result
 }
 
 async function main() {
@@ -45,54 +61,69 @@ async function main() {
   const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
   const user = admin ? { id: admin.id, fullName: admin.fullName } : undefined
 
-  // Asigna AFORE a los empleados que no lo tengan.
   const employees = await prisma.employee.findMany()
   for (const employee of employees) {
     const afore = AFORES[fullName(employee)]
-    if (afore && !employee.afore) {
-      await prisma.employee.update({ where: { id: employee.id }, data: { afore } })
-    }
+    if (afore && !employee.afore) await prisma.employee.update({ where: { id: employee.id }, data: { afore } })
   }
   console.log('AFORE asignado a los empleados.')
+  console.log(`Empleados activos: ${employees.filter((e) => e.active).length}`)
 
-  const activos = employees.filter((employee) => employee.active).length
-  console.log(`Empleados activos: ${activos}`)
+  // ── Historico mensual 2024 y 2025 (para reportes anual/mensual/bimestral) ──
+  let historicos = 0
+  for (const year of [2024, 2025]) {
+    for (let month = 1; month <= 12; month++) {
+      await makePayroll({
+        periodType: 'MENSUAL',
+        start: `${year}-${pad(month)}-01`,
+        end: `${year}-${pad(month)}-28`,
+        pay: `${year}-${pad(month)}-28`,
+        savings: true,
+        notes: `Nomina mensual ${pad(month)}/${year}`,
+        finalStatus: 'PAGADA',
+      }, user)
+      historicos++
+    }
+  }
+  console.log(`Sembradas ${historicos} nominas mensuales pagadas (2024-2025).`)
 
-  // 1) Quincenal pagada (primera quincena de junio)
-  const p1 = await payroll.create({ periodType: 'QUINCENAL', periodStart: '2026-06-01', periodEnd: '2026-06-15', paymentDate: '2026-06-16', applySavingsFund: true, notes: 'Primera quincena de junio.' }, user)
-  await payroll.changeStatus(p1.id, 'EN_PROCESO')
-  await payroll.changeStatus(p1.id, 'PAGADA')
-  console.log(`1) ${p1.folio} QUINCENAL PAGADA -> ${p1.receipts.length} recibos, neto ${p1.totalNet}`)
+  // ── 2026: quincenales con estados variados + INCAPACIDAD ──
+  // 1) Quincenal pagada con escenario de INCAPACIDAD (Jose, enfermedad general 5 dias)
+  const inc = await makePayroll({
+    periodType: 'QUINCENAL', start: '2026-06-01', end: '2026-06-15', pay: '2026-06-16', savings: true,
+    notes: 'Primera quincena de junio. Incluye incapacidad por enfermedad general.',
+    finalStatus: 'PAGADA',
+    edits: async (p) => {
+      const jose = p.receipts.find((r) => r.employeeName === 'José Hernández Cruz')
+      if (jose) await payroll.updateReceipt(p.id, jose.id, { workedDays: 10, absentDays: 0, disabilityDays: 5, disabilityType: 'ENFERMEDAD_GENERAL', extraPerceptions: 0, infonavit: 0, otherDeductions: 0 })
+    },
+  }, user)
+  console.log(`Escenario incapacidad -> ${inc.folio} (Jose con 5 dias de incapacidad).`)
 
-  // 2) Quincenal pagada (segunda quincena de junio) con variaciones
-  let p2 = await payroll.create({ periodType: 'QUINCENAL', periodStart: '2026-06-16', periodEnd: '2026-06-30', paymentDate: '2026-07-01', applySavingsFund: true, notes: 'Segunda quincena de junio.' }, user)
-  const jose = receiptFor(p2, 'José Hernández Cruz')
-  if (jose) await payroll.updateReceipt(p2.id, jose.id, { workedDays: 13, absentDays: 2, extraPerceptions: 0, infonavit: 0, otherDeductions: 300 })
-  const ana = receiptFor(p2, 'Ana López Pérez')
-  if (ana) await payroll.updateReceipt(p2.id, ana.id, { workedDays: 15, absentDays: 0, extraPerceptions: 2500, infonavit: 0, otherDeductions: 0 })
-  await payroll.changeStatus(p2.id, 'EN_PROCESO')
-  p2 = await payroll.changeStatus(p2.id, 'PAGADA')
-  console.log(`2) ${p2.folio} QUINCENAL PAGADA (con faltas/bono) -> neto ${p2.totalNet}`)
+  // 2) Quincenal pagada con bono y credito INFONAVIT
+  await makePayroll({
+    periodType: 'QUINCENAL', start: '2026-06-16', end: '2026-06-30', pay: '2026-07-01', savings: true,
+    notes: 'Segunda quincena de junio.', finalStatus: 'PAGADA',
+    edits: async (p) => {
+      const ana = p.receipts.find((r) => r.employeeName === 'Ana López Pérez')
+      if (ana) await payroll.updateReceipt(p.id, ana.id, { workedDays: 15, extraPerceptions: 2500, infonavit: 0, otherDeductions: 0 })
+      const maria = p.receipts.find((r) => r.employeeName === 'María Ramírez García')
+      if (maria) await payroll.updateReceipt(p.id, maria.id, { workedDays: 15, extraPerceptions: 0, infonavit: 1200, otherDeductions: 0 })
+    },
+  }, user)
 
-  // 3) Quincenal en proceso (primera quincena de julio, en revision)
-  let p3 = await payroll.create({ periodType: 'QUINCENAL', periodStart: '2026-07-01', periodEnd: '2026-07-15', paymentDate: '2026-07-16', applySavingsFund: true, notes: 'Primera quincena de julio, en revision.' }, user)
-  const maria = receiptFor(p3, 'María Ramírez García')
-  if (maria) await payroll.updateReceipt(p3.id, maria.id, { workedDays: 15, absentDays: 0, extraPerceptions: 1800, infonavit: 900, otherDeductions: 0 })
-  p3 = await payroll.changeStatus(p3.id, 'EN_PROCESO')
-  console.log(`3) ${p3.folio} QUINCENAL EN_PROCESO -> neto ${p3.totalNet}`)
+  // 3) Quincenal en proceso
+  await makePayroll({ periodType: 'QUINCENAL', start: '2026-07-01', end: '2026-07-15', pay: '2026-07-16', savings: true, notes: 'Primera quincena de julio, en revision.', finalStatus: 'EN_PROCESO' }, user)
 
-  // 4) Quincenal en borrador (segunda quincena de julio, proxima)
-  const p4 = await payroll.create({ periodType: 'QUINCENAL', periodStart: '2026-07-16', periodEnd: '2026-07-31', paymentDate: '2026-08-01', applySavingsFund: true, notes: 'Segunda quincena de julio, en captura.' }, user)
-  console.log(`4) ${p4.folio} QUINCENAL BORRADOR -> neto ${p4.totalNet}`)
+  // 4) Quincenal en borrador (proxima)
+  await makePayroll({ periodType: 'QUINCENAL', start: '2026-07-16', end: '2026-07-31', pay: '2026-08-01', savings: true, notes: 'Segunda quincena de julio, en captura.', finalStatus: 'BORRADOR' }, user)
 
-  // 5) Mensual cancelada (corrida de mayo anulada por error)
-  const p5 = await payroll.create({ periodType: 'MENSUAL', periodStart: '2026-05-01', periodEnd: '2026-05-31', paymentDate: '2026-06-01', applySavingsFund: false, notes: 'Corrida mensual anulada por error de captura.' }, user)
-  await payroll.changeStatus(p5.id, 'CANCELADA')
-  console.log(`5) ${p5.folio} MENSUAL CANCELADA -> neto ${p5.totalNet}`)
+  // 5) Mensual cancelada
+  await makePayroll({ periodType: 'MENSUAL', start: '2026-05-01', end: '2026-05-31', pay: '2026-06-01', savings: false, notes: 'Corrida mensual anulada por error.', finalStatus: 'CANCELADA' }, user)
 
   const total = await prisma.payroll.count()
   const receipts = await prisma.payrollReceipt.count()
-  console.log(`\nListo: ${total} nominas y ${receipts} recibos de prueba creados.`)
+  console.log(`\nListo: ${total} nominas y ${receipts} recibos de prueba creados (2024-2026).`)
 }
 
 main()

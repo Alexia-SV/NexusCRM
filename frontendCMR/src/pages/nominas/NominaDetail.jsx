@@ -6,7 +6,7 @@ import { getApiError } from '../../services/api'
 import { changePayrollStatus, deleteReceipt, generateReceipts, getPayroll, updateReceipt } from '../../services/payroll'
 import { downloadPayrollPdf } from '../../utils/payrollPdf'
 import { downloadPayrollSummaryPdf } from '../../utils/payrollSummaryPdf'
-import { statusConfig, periodLabels, contractTypeLabels, formatMoney, formatDate } from './payrollShared'
+import { statusConfig, periodLabels, contractTypeLabels, disabilityTypeLabels, formatMoney, formatDate } from './payrollShared'
 
 const transitions = {
   BORRADOR: [
@@ -39,6 +39,8 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
   const [form, setForm] = useState({
     workedDays: receipt.workedDays,
     absentDays: receipt.absentDays,
+    disabilityDays: receipt.disabilityDays || 0,
+    disabilityType: receipt.disabilityType || '',
     extraPerceptions: receipt.extraPerceptions || '',
     infonavit: receipt.infonavit || '',
     otherDeductions: receipt.otherDeductions || '',
@@ -54,6 +56,8 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
       const updated = await updateReceipt(payroll.id, receipt.id, {
         workedDays: Number(form.workedDays),
         absentDays: Number(form.absentDays || 0),
+        disabilityDays: Number(form.disabilityDays || 0),
+        disabilityType: form.disabilityType || undefined,
         extraPerceptions: form.extraPerceptions === '' ? 0 : Number(form.extraPerceptions),
         infonavit: form.infonavit === '' ? 0 : Number(form.infonavit),
         otherDeductions: form.otherDeductions === '' ? 0 : Number(form.otherDeductions),
@@ -103,6 +107,11 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
             <label className="text-[11px] font-semibold uppercase text-slate-500">INFONAVIT<input type="number" step="0.01" value={form.infonavit} onChange={set('infonavit')} className={`mt-1 ${numberInput}`} /></label>
             <label className="text-[11px] font-semibold uppercase text-slate-500">Otros desc.<input type="number" step="0.01" value={form.otherDeductions} onChange={set('otherDeductions')} className={`mt-1 ${numberInput}`} /></label>
           </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="text-[11px] font-semibold uppercase text-slate-500">Días de incapacidad<input type="number" value={form.disabilityDays} onChange={set('disabilityDays')} className={`mt-1 ${numberInput}`} /></label>
+            <label className="text-[11px] font-semibold uppercase text-slate-500 sm:col-span-2">Tipo de incapacidad<select value={form.disabilityType} onChange={set('disabilityType')} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-4 focus:ring-sky-100"><option value="">Sin incapacidad</option><option value="ENFERMEDAD_GENERAL">Enfermedad general (subsidio 60% desde día 4)</option><option value="RIESGO_TRABAJO">Riesgo de trabajo (100% desde día 1)</option><option value="MATERNIDAD">Maternidad (100%)</option></select></label>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Los días de incapacidad no los paga la empresa; el IMSS cubre un subsidio (informativo). Captura en "Días" solo los días efectivamente trabajados.</p>
           <button onClick={save} disabled={saving} className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-400">{saving ? 'Recalculando...' : 'Recalcular y guardar'}</button>
         </section>}
 
@@ -117,7 +126,7 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
           <section className="rounded-xl border border-slate-100 p-4">
             <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-rose-700">Deducciones</h3>
             <div className="divide-y divide-slate-100">
-              <div className="pb-1"><Line label="IMSS Enf. y Maternidad" value={receipt.imssEnfMat} negative /><Line label="IMSS Invalidez y Vida" value={receipt.imssInvVida} negative /><Line label="IMSS Cesantía y Vejez" value={receipt.imssCesVejez} negative /><Line label="ISR retenido" value={receipt.isrWithholding} negative /><Line label="INFONAVIT" value={receipt.infonavit} negative /><Line label="Fondo de ahorro" value={receipt.savingsFund} negative /><Line label="Otros descuentos" value={receipt.otherDeductions} negative /></div>
+              <div className="pb-1"><Line label="IMSS Enf. y Maternidad" value={receipt.imssEnfMat} negative /><Line label="IMSS Invalidez y Vida" value={receipt.imssInvVida} negative /><Line label="Cesantía y Vejez → AFORE" value={receipt.imssCesVejez} negative /><Line label="ISR retenido" value={receipt.isrWithholding} negative /><Line label="INFONAVIT (crédito)" value={receipt.infonavit} negative /><Line label="Fondo de ahorro" value={receipt.savingsFund} negative /><Line label="Otros descuentos" value={receipt.otherDeductions} negative /></div>
               <div className="pt-1"><Line label="Total deducciones" value={receipt.totalDeductions} strong /></div>
             </div>
           </section>
@@ -126,6 +135,28 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
         <div className="flex items-center justify-between rounded-xl bg-slate-900 px-4 py-3">
           <span className="text-sm font-semibold text-white">Neto a pagar</span>
           <span className="text-xl font-bold text-white tabular-nums">{formatMoney(receipt.netPay)}</span>
+        </div>
+
+        {receipt.disabilityType && <section className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-amber-700">Incapacidad ({disabilityTypeLabels[receipt.disabilityType]})</h3>
+          <Line label={`Subsidio IMSS · ${receipt.disabilityDays} día(s) (lo paga el IMSS, no la empresa)`} value={receipt.imssSubsidy} />
+        </section>}
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <section className="rounded-xl border border-slate-100 p-4">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-violet-700">Aportaciones patronales (no afectan tu neto)</h3>
+            <div className="divide-y divide-slate-100">
+              <div className="pb-1"><Line label="IMSS patronal (todos los ramos)" value={receipt.patronImssTotal} /><Line label="Retiro (2%)" value={receipt.patronRetiro} /><Line label="Cesantía y Vejez patronal" value={receipt.patronCesantiaVejez} /><Line label="INFONAVIT (5%)" value={receipt.patronInfonavit} /></div>
+              <div className="pt-1"><Line label="Costo patronal del recibo" value={receipt.patronTotal} strong /></div>
+            </div>
+          </section>
+          <section className="rounded-xl border border-sky-100 bg-sky-50/50 p-4">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-sky-700">AFORE · {receipt.afore || 'Sin registrar'}</h3>
+            <div className="divide-y divide-slate-100">
+              <div className="pb-1"><Line label="Aportación del trabajador (Ces. y Vejez)" value={receipt.imssCesVejez} /><Line label="Retiro (patrón)" value={receipt.patronRetiro} /><Line label="Cesantía y Vejez (patrón)" value={receipt.patronCesantiaVejez} /></div>
+              <div className="pt-1"><Line label="Total depositado en tu AFORE (RCV)" value={receipt.rcvAforeTotal} strong /></div>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -201,22 +232,23 @@ export default function NominaDetail() {
 
     {error && <div role="alert" className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
-    <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recibos</p><p className="mt-1 text-2xl font-bold text-slate-900">{payroll.receipts.length}</p></div>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Percepciones</p><p className="mt-1 text-lg font-bold text-slate-900">{formatMoney(payroll.totalGross)}</p></div>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Deducciones</p><p className="mt-1 text-lg font-bold text-rose-600">{formatMoney(payroll.totalDeductions)}</p></div>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total neto</p><p className="mt-1 text-lg font-bold text-emerald-600">{formatMoney(payroll.totalNet)}</p></div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Costo patronal</p><p className="mt-1 text-lg font-bold text-violet-600">{formatMoney(payroll.totalEmployerCost)}</p></div>
     </div>
 
     <div className="mb-6 flex flex-wrap gap-2">
       <button onClick={() => downloadPayrollSummaryPdf(payroll)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>Exportar PDF</button>
-      {editable && <button onClick={generate} disabled={busy} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>Generar recibos faltantes</button>}
+      {editable && payroll.pendingReceipts > 0 && <button onClick={generate} disabled={busy} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>Generar recibos faltantes ({payroll.pendingReceipts})</button>}
       {editable && <button onClick={() => navigate(`/nominas/editar/${payroll.id}`)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Editar periodo</button>}
       {canWrite && transitions[payroll.status].map((action) => <button key={action.to} onClick={() => changeStatus(action.to)} disabled={busy} className={`rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${action.class}`}>{action.label}</button>)}
     </div>
 
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {payroll.receipts.length === 0 ? <p className="py-14 text-center text-sm text-slate-500">Sin recibos. {editable ? 'Usa "Generar recibos faltantes".' : ''}</p>
+      {payroll.receipts.length === 0 ? <p className="py-14 text-center text-sm text-slate-500">Sin recibos.{editable && payroll.pendingReceipts > 0 ? ' Usa "Generar recibos faltantes".' : ''}</p>
         : <table className="w-full min-w-[720px]">
           <thead><tr className="border-b border-slate-100 bg-slate-50 text-left text-xs text-slate-500">
             <th className="px-6 py-3">Empleado</th>

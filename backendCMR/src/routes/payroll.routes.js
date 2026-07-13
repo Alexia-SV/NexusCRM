@@ -14,6 +14,7 @@ const {
   updateReceiptSchema,
   receiptIdSchema,
   configUpdateSchema,
+  reportSchema,
 } = require('../validators/payroll.validators')
 
 const router = Router()
@@ -25,6 +26,9 @@ const WRITE = ['ADMIN', 'CONTADOR']
 // Configuracion (lectura: escritores; escritura: admin)
 router.get('/config', requireRole(...WRITE), asyncHandler(controller.getConfig))
 router.put('/config', requireRole('ADMIN'), validate(configUpdateSchema), asyncHandler(controller.updateConfig))
+
+// Reportes (mensual / anual / bimestral)
+router.get('/report', requireRole(...READ), validate(reportSchema), asyncHandler(controller.report))
 
 // Recibo individual
 router.get('/receipts/:receiptId', requireRole(...READ), validate(receiptIdSchema), asyncHandler(controller.getReceipt))

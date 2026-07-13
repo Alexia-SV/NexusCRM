@@ -5,6 +5,8 @@ const date = z.string().date('Use YYYY-MM-DD format')
 const money = z.preprocess((value) => (value === '' || value == null ? undefined : Number(value)), z.number().min(0).optional())
 const periodType = z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL'])
 const status = z.enum(['BORRADOR', 'EN_PROCESO', 'PAGADA', 'CANCELADA'])
+const disabilityType = z.enum(['ENFERMEDAD_GENERAL', 'RIESGO_TRABAJO', 'MATERNIDAD'])
+const rate = z.coerce.number().min(0).max(100)
 
 const payrollFields = {
   periodType,
@@ -30,9 +32,15 @@ const payrollUpdateBody = z.object(payrollFields).superRefine((data, ctx) => {
 const receiptBody = z.object({
   workedDays: z.coerce.number().int().min(0).max(31),
   absentDays: z.coerce.number().int().min(0).max(31).optional().default(0),
+  disabilityDays: z.coerce.number().int().min(0).max(31).optional().default(0),
+  disabilityType: z.preprocess((value) => (value === '' || value == null ? undefined : value), disabilityType.optional()),
   extraPerceptions: money,
   infonavit: money,
   otherDeductions: money,
+}).superRefine((data, ctx) => {
+  if (data.disabilityDays > 0 && !data.disabilityType) {
+    ctx.addIssue({ code: 'custom', path: ['disabilityType'], message: 'Selecciona el tipo de incapacidad' })
+  }
 })
 
 const listPayrollSchema = z.object({
@@ -57,15 +65,38 @@ const receiptIdSchema = z.object({ params: z.object({ receiptId: uuid }) })
 const configUpdateSchema = z.object({
   body: z.object({
     umaDaily: z.coerce.number().positive(),
-    imssEnfMatRate: z.coerce.number().min(0).max(100),
-    imssInvVidaRate: z.coerce.number().min(0).max(100),
-    imssCesVejezRate: z.coerce.number().min(0).max(100),
-    infonavitEmployerRate: z.coerce.number().min(0).max(100),
+    imssEnfMatRate: rate,
+    imssInvVidaRate: rate,
+    imssCesVejezRate: rate,
+    infonavitEmployerRate: rate,
     aguinaldoDays: z.coerce.number().int().min(0).max(365),
     vacationDays: z.coerce.number().int().min(0).max(365),
-    primaVacacionalRate: z.coerce.number().min(0).max(100),
-    fondoAhorroRate: z.coerce.number().min(0).max(100),
+    primaVacacionalRate: rate,
+    fondoAhorroRate: rate,
     integrationFactor: z.coerce.number().min(1).max(3),
+    infonavitMaxDiscountRate: rate,
+    sbcCapUma: z.coerce.number().min(1).max(100),
+    excedenteUmaThreshold: z.coerce.number().min(0).max(100),
+    imssEnfMatFixedRate: rate,
+    imssEnfMatExcedentePatronRate: rate,
+    imssPrestDineroPatronRate: rate,
+    imssGastosMedPatronRate: rate,
+    imssInvVidaPatronRate: rate,
+    imssGuarderiasPatronRate: rate,
+    imssRiesgoTrabajoRate: rate,
+    retiroPatronRate: rate,
+    disabilityGeneralRate: rate,
+    disabilityRiskRate: rate,
+    disabilityMaternityRate: rate,
+    disabilityWaitingDays: z.coerce.number().int().min(0).max(31),
+  }),
+})
+
+const reportSchema = z.object({
+  query: z.object({
+    groupBy: z.enum(['month', 'year', 'bimester']).optional().default('month'),
+    year: z.coerce.number().int().min(2000).max(2100).optional(),
+    includeCancelled: z.preprocess((value) => (value === 'true' ? true : value === 'false' ? false : value), z.boolean().optional().default(false)),
   }),
 })
 
@@ -80,4 +111,5 @@ module.exports = {
   updateReceiptSchema,
   receiptIdSchema,
   configUpdateSchema,
+  reportSchema,
 }

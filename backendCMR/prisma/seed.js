@@ -100,6 +100,23 @@ async function main() {
     await prisma.isrBracket.createMany({ data: rows })
     console.log(`Seeded ${rows.length} ISR brackets (weekly, biweekly, monthly)`)
   }
+
+  // Tabla progresiva de la cuota PATRONAL de Cesantia y Vejez (valores 2025, editables).
+  // lowerUma = limite inferior del SBC en multiplos de UMA; rate = % a cargo del patron.
+  if ((await prisma.cesantiaVejezPatronBracket.count()) === 0) {
+    const cesantia = [
+      { lowerUma: 0.0, rate: 3.15 },
+      { lowerUma: 1.01, rate: 4.202 },
+      { lowerUma: 1.51, rate: 4.732 },
+      { lowerUma: 2.01, rate: 5.052 },
+      { lowerUma: 2.51, rate: 5.265 },
+      { lowerUma: 3.01, rate: 5.418 },
+      { lowerUma: 3.51, rate: 5.532 },
+      { lowerUma: 4.01, rate: 6.422 },
+    ]
+    await prisma.cesantiaVejezPatronBracket.createMany({ data: cesantia.map((row, index) => ({ ...row, sortOrder: index })) })
+    console.log(`Seeded ${cesantia.length} employer Cesantia y Vejez brackets`)
+  }
 }
 
 main()

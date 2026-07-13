@@ -15,6 +15,7 @@ import NominasList from '../pages/nominas/NominasList'
 import NominaForm from '../pages/nominas/NominaForm'
 import NominaDetail from '../pages/nominas/NominaDetail'
 import NominaConfig from '../pages/nominas/NominaConfig'
+import NominaReportes from '../pages/nominas/NominaReportes'
 import PlaceholderModule from '../pages/shared/PlaceholderModule'
 import PrivateLayout from '../components/layout/PrivateLayout'
 import { useAuth } from '../context/AuthContext'
@@ -65,6 +66,7 @@ export default function AppRouter() {
     <Route path="/nominas" element={<PrivatePage roles={permissions.nominasRead}><NominasList /></PrivatePage>} />
     <Route path="/nominas/nueva" element={<PrivatePage roles={permissions.nominasWrite}><NominaForm /></PrivatePage>} />
     <Route path="/nominas/configuracion" element={<PrivatePage roles={permissions.nominasConfig}><NominaConfig /></PrivatePage>} />
+    <Route path="/nominas/reportes" element={<PrivatePage roles={permissions.nominasRead}><NominaReportes /></PrivatePage>} />
     <Route path="/nominas/editar/:id" element={<PrivatePage roles={permissions.nominasWrite}><NominaForm /></PrivatePage>} />
     <Route path="/nominas/:id" element={<PrivatePage roles={permissions.nominasRead}><NominaDetail /></PrivatePage>} />
     <Route path="/insumos" element={<PrivatePage roles={permissions.dashboard}><PlaceholderModule name="Insumos" /></PrivatePage>} />

@@ -51,6 +51,12 @@ export async function getReceipt(receiptId) {
   return data.receipt
 }
 
+// ── Reportes ─────────────────────────────────────────
+export async function getPayrollReport(params = {}) {
+  const { data } = await api.get('/payroll/report', { params })
+  return data
+}
+
 // ── Configuración ────────────────────────────────────
 export async function getPayrollConfig() {
   const { data } = await api.get('/payroll/config')

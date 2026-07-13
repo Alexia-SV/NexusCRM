@@ -4,6 +4,11 @@ const { AppError } = require('../utils/AppError')
 const NUMERIC = [
   'umaDaily', 'imssEnfMatRate', 'imssInvVidaRate', 'imssCesVejezRate',
   'infonavitEmployerRate', 'primaVacacionalRate', 'fondoAhorroRate', 'integrationFactor',
+  'infonavitMaxDiscountRate', 'sbcCapUma', 'excedenteUmaThreshold',
+  'imssEnfMatFixedRate', 'imssEnfMatExcedentePatronRate', 'imssPrestDineroPatronRate',
+  'imssGastosMedPatronRate', 'imssInvVidaPatronRate', 'imssGuarderiasPatronRate',
+  'imssRiesgoTrabajoRate', 'retiroPatronRate',
+  'disabilityGeneralRate', 'disabilityRiskRate', 'disabilityMaternityRate',
 ]
 
 function serializeConfig(config) {
@@ -13,8 +18,12 @@ function serializeConfig(config) {
   return data
 }
 
-function serializeBracket(bracket) {
+function serializeIsrBracket(bracket) {
   return { ...bracket, lowerLimit: Number(bracket.lowerLimit), fixedFee: Number(bracket.fixedFee), rate: Number(bracket.rate) }
+}
+
+function serializeCesantiaBracket(bracket) {
+  return { ...bracket, lowerUma: Number(bracket.lowerUma), rate: Number(bracket.rate) }
 }
 
 async function getConfigRow() {
@@ -24,11 +33,16 @@ async function getConfigRow() {
 }
 
 async function getConfig() {
-  const [config, brackets] = await Promise.all([
+  const [config, isrBrackets, cesantiaBrackets] = await Promise.all([
     getConfigRow(),
     prisma.isrBracket.findMany({ orderBy: [{ period: 'asc' }, { sortOrder: 'asc' }] }),
+    prisma.cesantiaVejezPatronBracket.findMany({ orderBy: { sortOrder: 'asc' } }),
   ])
-  return { config: serializeConfig(config), isrBrackets: brackets.map(serializeBracket) }
+  return {
+    config: serializeConfig(config),
+    isrBrackets: isrBrackets.map(serializeIsrBracket),
+    cesantiaBrackets: cesantiaBrackets.map(serializeCesantiaBracket),
+  }
 }
 
 async function updateConfig(input) {
@@ -41,4 +55,8 @@ async function getBracketsByPeriod(period) {
   return prisma.isrBracket.findMany({ where: { period }, orderBy: { sortOrder: 'asc' } })
 }
 
-module.exports = { getConfig, getConfigRow, updateConfig, getBracketsByPeriod, serializeConfig }
+async function getCesantiaBrackets() {
+  return prisma.cesantiaVejezPatronBracket.findMany({ orderBy: { sortOrder: 'asc' } })
+}
+
+module.exports = { getConfig, getConfigRow, updateConfig, getBracketsByPeriod, getCesantiaBrackets, serializeConfig }

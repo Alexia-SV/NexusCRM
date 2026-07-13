@@ -1,16 +1,17 @@
 const { prisma } = require('../config/prisma')
 const { AppError } = require('../utils/AppError')
 const { computeReceipt, resolveDailySbc, round2 } = require('../utils/payroll')
-const { getConfigRow, getBracketsByPeriod } = require('./payrollConfig.service')
+const { getConfigRow, getBracketsByPeriod, getCesantiaBrackets } = require('./payrollConfig.service')
 
 const PERIOD_DAYS = { SEMANAL: 7, QUINCENAL: 15, MENSUAL: 30 }
 
 const RECEIPT_MONEY = [
-  'dailySalary', 'sbc', 'baseSalary', 'aguinaldoProportional', 'vacationProportional', 'vacationBonus',
+  'dailySalary', 'sbc', 'imssSubsidy', 'baseSalary', 'aguinaldoProportional', 'vacationProportional', 'vacationBonus',
   'extraPerceptions', 'totalPerceptions', 'imssEnfMat', 'imssInvVida', 'imssCesVejez', 'imssTotal',
   'isrWithholding', 'infonavit', 'savingsFund', 'otherDeductions', 'totalDeductions', 'netPay',
+  'patronImssTotal', 'patronRetiro', 'patronCesantiaVejez', 'patronInfonavit', 'patronTotal', 'rcvAforeTotal',
 ]
-const PAYROLL_MONEY = ['totalGross', 'totalDeductions', 'totalNet']
+const PAYROLL_MONEY = ['totalGross', 'totalDeductions', 'totalNet', 'totalEmployerCost']
 
 function serializeReceipt(receipt) {
   const data = { ...receipt }
@@ -51,10 +52,16 @@ async function recalcTotals(tx, payrollId) {
     gross: acc.gross + Number(receipt.totalPerceptions),
     deductions: acc.deductions + Number(receipt.totalDeductions),
     net: acc.net + Number(receipt.netPay),
-  }), { gross: 0, deductions: 0, net: 0 })
+    employer: acc.employer + Number(receipt.patronTotal),
+  }), { gross: 0, deductions: 0, net: 0, employer: 0 })
   await tx.payroll.update({
     where: { id: payrollId },
-    data: { totalGross: round2(totals.gross), totalDeductions: round2(totals.deductions), totalNet: round2(totals.net) },
+    data: {
+      totalGross: round2(totals.gross),
+      totalDeductions: round2(totals.deductions),
+      totalNet: round2(totals.net),
+      totalEmployerCost: round2(totals.employer),
+    },
   })
 }
 
@@ -82,7 +89,11 @@ async function getById(id) {
     include: { receipts: { orderBy: { employeeName: 'asc' } } },
   })
   if (!payroll) throw new AppError('Payroll not found', 404, 'PAYROLL_NOT_FOUND')
-  return serializePayroll(payroll)
+  // Empleados activos que todavia no tienen recibo en esta nomina.
+  const activeEmployees = await prisma.employee.findMany({ where: { active: true }, select: { id: true } })
+  const withReceipt = new Set(payroll.receipts.map((receipt) => receipt.employeeId))
+  const pendingReceipts = activeEmployees.filter((employee) => !withReceipt.has(employee.id)).length
+  return { ...serializePayroll(payroll), pendingReceipts }
 }
 
 async function create(input, user) {
@@ -130,8 +141,7 @@ async function update(id, input) {
     })
     // Si cambia el periodo (tabla ISR) o el fondo de ahorro, recalcula recibos.
     if (periodChanged || savingsChanged) {
-      const config = await getConfigRow()
-      const brackets = await getBracketsByPeriod(input.periodType)
+      const [config, brackets, cesantiaBrackets] = await Promise.all([getConfigRow(), getBracketsByPeriod(input.periodType), getCesantiaBrackets()])
       const receipts = await tx.payrollReceipt.findMany({ where: { payrollId: id } })
       for (const receipt of receipts) {
         const amounts = computeReceipt({
@@ -139,12 +149,14 @@ async function update(id, input) {
           sbcDaily: Number(receipt.sbc),
           workedDays: receipt.workedDays,
           absentDays: receipt.absentDays,
+          disabilityDays: receipt.disabilityDays,
+          disabilityType: receipt.disabilityType,
           extraPerceptions: Number(receipt.extraPerceptions),
           infonavit: Number(receipt.infonavit),
           otherDeductions: Number(receipt.otherDeductions),
           applySavingsFund: Boolean(input.applySavingsFund),
           periodType: input.periodType,
-        }, config, brackets)
+        }, config, brackets, cesantiaBrackets)
         await tx.payrollReceipt.update({ where: { id: receipt.id }, data: amounts })
       }
       await recalcTotals(tx, id)
@@ -181,9 +193,10 @@ async function generateReceipts(payrollId, { employeeIds } = {}) {
   if (!payroll) throw new AppError('Payroll not found', 404, 'PAYROLL_NOT_FOUND')
   assertEditable(payroll)
 
-  const [config, brackets, existing] = await Promise.all([
+  const [config, brackets, cesantiaBrackets, existing] = await Promise.all([
     getConfigRow(),
     getBracketsByPeriod(payroll.periodType),
+    getCesantiaBrackets(),
     prisma.payrollReceipt.findMany({ where: { payrollId }, select: { employeeId: true } }),
   ])
   const already = new Set(existing.map((receipt) => receipt.employeeId))
@@ -200,8 +213,9 @@ async function generateReceipts(payrollId, { employeeIds } = {}) {
       const sbcDaily = resolveDailySbc({ dailySalary: Number(employee.dailySalary), integratedImssSalary: employee.integratedImssSalary }, config)
       const amounts = computeReceipt({
         dailySalary: Number(employee.dailySalary), sbcDaily, workedDays: defaultDays, absentDays: 0,
+        disabilityDays: 0, disabilityType: null,
         extraPerceptions: 0, infonavit: 0, otherDeductions: 0, applySavingsFund: payroll.applySavingsFund, periodType: payroll.periodType,
-      }, config, brackets)
+      }, config, brackets, cesantiaBrackets)
       await tx.payrollReceipt.create({
         data: {
           payrollId,
@@ -231,20 +245,21 @@ async function updateReceipt(payrollId, receiptId, input) {
   const receipt = await prisma.payrollReceipt.findUnique({ where: { id: receiptId } })
   if (!receipt || receipt.payrollId !== payrollId) throw new AppError('Receipt not found', 404, 'RECEIPT_NOT_FOUND')
 
-  const config = await getConfigRow()
-  const brackets = await getBracketsByPeriod(payroll.periodType)
+  const [config, brackets, cesantiaBrackets] = await Promise.all([getConfigRow(), getBracketsByPeriod(payroll.periodType), getCesantiaBrackets()])
   // El salario diario y el SBC quedan congelados en el recibo (regla de negocio).
   const amounts = computeReceipt({
     dailySalary: Number(receipt.dailySalary),
     sbcDaily: Number(receipt.sbc),
     workedDays: input.workedDays,
     absentDays: input.absentDays || 0,
+    disabilityDays: input.disabilityDays || 0,
+    disabilityType: input.disabilityType || null,
     extraPerceptions: input.extraPerceptions || 0,
     infonavit: input.infonavit || 0,
     otherDeductions: input.otherDeductions || 0,
     applySavingsFund: payroll.applySavingsFund,
     periodType: payroll.periodType,
-  }, config, brackets)
+  }, config, brackets, cesantiaBrackets)
 
   await prisma.$transaction(async (tx) => {
     await tx.payrollReceipt.update({ where: { id: receiptId }, data: amounts })
@@ -272,7 +287,65 @@ async function getReceipt(receiptId) {
   return { ...serializeReceipt(receipt), payroll: serializePayroll(receipt.payroll) }
 }
 
+// ── Reportes ───────────────────────────────────────────────
+const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+// Agrupa por año, mes o bimestre a partir de la fecha de pago (bimestre 1 = Ene-Feb).
+function groupInfo(groupBy, date) {
+  const y = date.getUTCFullYear()
+  const m = date.getUTCMonth()
+  if (groupBy === 'year') return { key: String(y), label: String(y), sort: y * 100 }
+  if (groupBy === 'bimester') {
+    const bim = Math.floor(m / 2) + 1
+    return { key: `${y}-B${bim}`, label: `Bimestre ${bim} · ${MONTHS[(bim - 1) * 2]}-${MONTHS[(bim - 1) * 2 + 1]} ${y}`, sort: y * 100 + bim }
+  }
+  return { key: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS[m]} ${y}`, sort: y * 100 + (m + 1) }
+}
+
+async function report({ groupBy = 'month', year, includeCancelled = false } = {}) {
+  const where = {
+    ...(year && { paymentDate: { gte: toDate(`${year}-01-01`), lte: toDate(`${year}-12-31`) } }),
+    ...(!includeCancelled && { status: { not: 'CANCELADA' } }),
+  }
+  const payrolls = await prisma.payroll.findMany({
+    where,
+    select: { paymentDate: true, totalGross: true, totalDeductions: true, totalNet: true, totalEmployerCost: true, receipts: { select: { id: true } } },
+  })
+  const groups = new Map()
+  for (const payroll of payrolls) {
+    const info = groupInfo(groupBy, new Date(payroll.paymentDate))
+    const group = groups.get(info.key) || { key: info.key, label: info.label, sort: info.sort, payrolls: 0, receipts: 0, totalGross: 0, totalDeductions: 0, totalNet: 0, totalEmployerCost: 0 }
+    group.payrolls += 1
+    group.receipts += payroll.receipts.length
+    group.totalGross += Number(payroll.totalGross)
+    group.totalDeductions += Number(payroll.totalDeductions)
+    group.totalNet += Number(payroll.totalNet)
+    group.totalEmployerCost += Number(payroll.totalEmployerCost)
+    groups.set(info.key, group)
+  }
+  const rows = [...groups.values()].sort((a, b) => a.sort - b.sort).map((group) => ({
+    key: group.key,
+    label: group.label,
+    payrolls: group.payrolls,
+    receipts: group.receipts,
+    totalGross: round2(group.totalGross),
+    totalDeductions: round2(group.totalDeductions),
+    totalNet: round2(group.totalNet),
+    totalEmployerCost: round2(group.totalEmployerCost),
+  }))
+  const totals = rows.reduce((acc, row) => ({
+    payrolls: acc.payrolls + row.payrolls,
+    receipts: acc.receipts + row.receipts,
+    totalGross: acc.totalGross + row.totalGross,
+    totalDeductions: acc.totalDeductions + row.totalDeductions,
+    totalNet: acc.totalNet + row.totalNet,
+    totalEmployerCost: acc.totalEmployerCost + row.totalEmployerCost,
+  }), { payrolls: 0, receipts: 0, totalGross: 0, totalDeductions: 0, totalNet: 0, totalEmployerCost: 0 })
+  for (const key of ['totalGross', 'totalDeductions', 'totalNet', 'totalEmployerCost']) totals[key] = round2(totals[key])
+  return { groupBy, year: year || null, rows, totals }
+}
+
 module.exports = {
   list, getById, create, update, changeStatus, remove,
-  generateReceipts, updateReceipt, removeReceipt, getReceipt,
+  generateReceipts, updateReceipt, removeReceipt, getReceipt, report,
 }

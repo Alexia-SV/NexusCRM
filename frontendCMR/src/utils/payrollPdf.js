@@ -153,7 +153,7 @@ function buildReceipt(receipt, payroll) {
 
   amountRow(ops, 'IMSS Enf. y Mat.', receipt.imssEnfMat, rightX, innerWidth, ly, { negative: true })
   amountRow(ops, 'IMSS Inv. y Vida', receipt.imssInvVida, rightX, innerWidth, ly - step, { negative: true })
-  amountRow(ops, 'IMSS Ces. y Vejez', receipt.imssCesVejez, rightX, innerWidth, ly - step * 2, { negative: true })
+  amountRow(ops, 'Ces. y Vejez -> AFORE', receipt.imssCesVejez, rightX, innerWidth, ly - step * 2, { negative: true })
   amountRow(ops, 'ISR retenido', receipt.isrWithholding, rightX, innerWidth, ly - step * 3, { negative: true })
   amountRow(ops, 'INFONAVIT', receipt.infonavit, rightX, innerWidth, ly - step * 4, { negative: true })
   amountRow(ops, 'Fondo de ahorro', receipt.savingsFund, rightX, innerWidth, ly - step * 5, { negative: true })
@@ -167,6 +167,36 @@ function buildReceipt(receipt, payroll) {
   ops.push(text('NETO A PAGAR', PAGE.margin + 16, y - 12, { size: 12, bold: true, color: '255 255 255' }))
   const net = money(receipt.netPay)
   ops.push(text(net, PAGE.width - PAGE.margin - 16 - net.length * 8.5, y - 14, { size: 16, bold: true, color: '255 255 255' }))
+
+  // Bloque informativo: aportaciones patronales + AFORE (RCV). No afectan el neto.
+  const bTop = y - 52
+  const bH = 100
+  const bColW = (CONTENT_WIDTH - gap) / 2
+  const bLeftX = PAGE.margin + 14
+  const bRightX = PAGE.margin + bColW + gap + 14
+  const bInner = bColW - 28
+  ops.push(fillRect(PAGE.margin, bTop - bH, bColW, bH, COLORS.panel))
+  ops.push(strokeRect(PAGE.margin, bTop - bH, bColW, bH, COLORS.line))
+  ops.push(fillRect(PAGE.margin + bColW + gap, bTop - bH, bColW, bH, COLORS.panel))
+  ops.push(strokeRect(PAGE.margin + bColW + gap, bTop - bH, bColW, bH, COLORS.line))
+  ops.push(text('Aportaciones patronales (costo empresa)', bLeftX, bTop - 16, { size: 9, bold: true, color: COLORS.ink }))
+  ops.push(text(`AFORE: ${receipt.afore || 'Sin registrar'} (RCV)`, bRightX, bTop - 16, { size: 9, bold: true, color: COLORS.sky }))
+  const bly = bTop - 34
+  const bstep = 15
+  amountRow(ops, 'IMSS patronal', receipt.patronImssTotal, bLeftX, bInner, bly, { size: 8.5 })
+  amountRow(ops, 'Retiro (2%)', receipt.patronRetiro, bLeftX, bInner, bly - bstep, { size: 8.5 })
+  amountRow(ops, 'Cesantia patronal', receipt.patronCesantiaVejez, bLeftX, bInner, bly - bstep * 2, { size: 8.5 })
+  amountRow(ops, 'INFONAVIT (5%)', receipt.patronInfonavit, bLeftX, bInner, bly - bstep * 3, { size: 8.5 })
+  amountRow(ops, 'Costo patronal total', receipt.patronTotal, bLeftX, bInner, bly - bstep * 4 - 2, { strong: true, size: 8.5 })
+  amountRow(ops, 'Trabajador (Ces. y Vejez)', receipt.imssCesVejez, bRightX, bInner, bly, { size: 8.5 })
+  amountRow(ops, 'Retiro (patron)', receipt.patronRetiro, bRightX, bInner, bly - bstep, { size: 8.5 })
+  amountRow(ops, 'Cesantia (patron)', receipt.patronCesantiaVejez, bRightX, bInner, bly - bstep * 2, { size: 8.5 })
+  amountRow(ops, 'Total a la AFORE (RCV)', receipt.rcvAforeTotal, bRightX, bInner, bly - bstep * 4 - 2, { strong: true, size: 8.5 })
+
+  if (receipt.disabilityType) {
+    const dLabel = { ENFERMEDAD_GENERAL: 'Enfermedad general', RIESGO_TRABAJO: 'Riesgo de trabajo', MATERNIDAD: 'Maternidad' }[receipt.disabilityType] || receipt.disabilityType
+    ops.push(text(`Incapacidad (${dLabel}, ${receipt.disabilityDays} dia(s)) - Subsidio IMSS: ${money(receipt.imssSubsidy)} (lo paga el IMSS, informativo)`, PAGE.margin, bTop - bH - 14, { size: 8, color: COLORS.muted }))
+  }
 
   ops.push(line(PAGE.margin, 40, PAGE.width - PAGE.margin, 40, COLORS.line))
   ops.push(text('Nexus CRM | Recibo generado automaticamente. Calculo aproximado, no sustituye el timbrado fiscal oficial.', PAGE.margin, 24, { size: 7.5, color: COLORS.muted }))

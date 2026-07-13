@@ -47,6 +47,12 @@ enum PeriodType {
   MENSUAL   @map("mensual")
 }
 
+enum PayrollDisabilityType {
+  ENFERMEDAD_GENERAL @map("enfermedad_general")
+  RIESGO_TRABAJO     @map("riesgo_trabajo")
+  MATERNIDAD         @map("maternidad")
+}
+
 model User {
   id                  String    @id @default(uuid()) @db.Uuid
   fullName            String    @map("full_name") @db.VarChar(150)
@@ -122,6 +128,30 @@ model PayrollConfig {
   primaVacacionalRate   Decimal  @map("prima_vacacional_rate") @db.Decimal(6, 4)
   fondoAhorroRate       Decimal  @map("fondo_ahorro_rate") @db.Decimal(6, 4)
   integrationFactor     Decimal  @map("integration_factor") @db.Decimal(8, 6)
+
+  // Tope del descuento por credito INFONAVIT (% del salario percibido). 20% para creditos (Art. 97 LFT).
+  infonavitMaxDiscountRate Decimal @default(20) @map("infonavit_max_discount_rate") @db.Decimal(6, 4)
+
+  // Tope del SBC en multiplos de UMA (25) y umbral del excedente de Enf/Mat (3 UMA).
+  sbcCapUma             Decimal @default(25) @map("sbc_cap_uma") @db.Decimal(6, 4)
+  excedenteUmaThreshold Decimal @default(3) @map("excedente_uma_threshold") @db.Decimal(6, 4)
+
+  // Cuotas PATRONALES (aportaciones del empleador, informativas, no descuentan al trabajador).
+  imssEnfMatFixedRate           Decimal @default(20.40) @map("imss_enf_mat_fixed_rate") @db.Decimal(6, 4)
+  imssEnfMatExcedentePatronRate Decimal @default(1.10) @map("imss_enf_mat_excedente_patron_rate") @db.Decimal(6, 4)
+  imssPrestDineroPatronRate     Decimal @default(0.70) @map("imss_prest_dinero_patron_rate") @db.Decimal(6, 4)
+  imssGastosMedPatronRate       Decimal @default(1.05) @map("imss_gastos_med_patron_rate") @db.Decimal(6, 4)
+  imssInvVidaPatronRate         Decimal @default(1.75) @map("imss_inv_vida_patron_rate") @db.Decimal(6, 4)
+  imssGuarderiasPatronRate      Decimal @default(1.00) @map("imss_guarderias_patron_rate") @db.Decimal(6, 4)
+  imssRiesgoTrabajoRate         Decimal @default(0.54) @map("imss_riesgo_trabajo_rate") @db.Decimal(6, 4)
+  retiroPatronRate              Decimal @default(2.00) @map("retiro_patron_rate") @db.Decimal(6, 4)
+
+  // Subsidio IMSS por incapacidad (% del SBC) y dias de espera de enfermedad general.
+  disabilityGeneralRate   Decimal @default(60) @map("disability_general_rate") @db.Decimal(6, 4)
+  disabilityRiskRate      Decimal @default(100) @map("disability_risk_rate") @db.Decimal(7, 4)
+  disabilityMaternityRate Decimal @default(100) @map("disability_maternity_rate") @db.Decimal(7, 4)
+  disabilityWaitingDays   Int     @default(3) @map("disability_waiting_days")
+
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("payroll_config")
@@ -140,6 +170,18 @@ model IsrBracket {
   @@map("isr_brackets")
 }
 
+// Tabla progresiva de la cuota PATRONAL de Cesantia y Vejez por rango de SBC
+// (en multiplos de UMA), segun la reforma de pensiones DOF 16-dic-2020. Editable en BD.
+model CesantiaVejezPatronBracket {
+  id        String  @id @default(uuid()) @db.Uuid
+  lowerUma  Decimal @map("lower_uma") @db.Decimal(8, 4)
+  rate      Decimal @db.Decimal(6, 4)
+  sortOrder Int     @map("sort_order")
+
+  @@index([sortOrder])
+  @@map("cesantia_vejez_patron_brackets")
+}
+
 // Cabecera: una corrida de nomina por periodo que agrupa varios recibos.
 model Payroll {
   id              String        @id @default(uuid()) @db.Uuid
@@ -150,9 +192,10 @@ model Payroll {
   paymentDate     DateTime      @map("payment_date") @db.Date
   status          PayrollStatus @default(BORRADOR)
   applySavingsFund Boolean      @default(false) @map("apply_savings_fund")
-  totalGross      Decimal       @default(0) @map("total_gross") @db.Decimal(14, 2)
-  totalDeductions Decimal       @default(0) @map("total_deductions") @db.Decimal(14, 2)
-  totalNet        Decimal       @default(0) @map("total_net") @db.Decimal(14, 2)
+  totalGross        Decimal     @default(0) @map("total_gross") @db.Decimal(14, 2)
+  totalDeductions   Decimal     @default(0) @map("total_deductions") @db.Decimal(14, 2)
+  totalNet          Decimal     @default(0) @map("total_net") @db.Decimal(14, 2)
+  totalEmployerCost Decimal     @default(0) @map("total_employer_cost") @db.Decimal(14, 2)
   notes           String?
   createdById     String?       @map("created_by_id") @db.Uuid
   createdByName   String?       @map("created_by_name") @db.VarChar(200)
@@ -192,6 +235,11 @@ model PayrollReceipt {
   dailySalary Decimal @map("daily_salary") @db.Decimal(12, 2)
   sbc         Decimal @db.Decimal(12, 2)
 
+  // Incapacidad (subsidio a cargo del IMSS, informativo; no lo paga la empresa)
+  disabilityDays Int                    @default(0) @map("disability_days")
+  disabilityType PayrollDisabilityType? @map("disability_type")
+  imssSubsidy    Decimal                @default(0) @map("imss_subsidy") @db.Decimal(12, 2)
+
   // Percepciones
   baseSalary            Decimal @map("base_salary") @db.Decimal(12, 2)
   aguinaldoProportional Decimal @default(0) @map("aguinaldo_proportional") @db.Decimal(12, 2)
@@ -213,6 +261,15 @@ model PayrollReceipt {
   totalDeductions Decimal    @map("total_deductions") @db.Decimal(12, 2)
 
   netPay       Decimal  @map("net_pay") @db.Decimal(12, 2)
+
+  // Aportaciones PATRONALES (costo del empleador, informativas; no afectan el neto del trabajador)
+  patronImssTotal     Decimal @default(0) @map("patron_imss_total") @db.Decimal(12, 2)
+  patronRetiro        Decimal @default(0) @map("patron_retiro") @db.Decimal(12, 2)
+  patronCesantiaVejez Decimal @default(0) @map("patron_cesantia_vejez") @db.Decimal(12, 2)
+  patronInfonavit     Decimal @default(0) @map("patron_infonavit") @db.Decimal(12, 2)
+  patronTotal         Decimal @default(0) @map("patron_total") @db.Decimal(12, 2)
+  rcvAforeTotal       Decimal @default(0) @map("rcv_afore_total") @db.Decimal(12, 2)
+
   pdfGenerated Boolean  @default(false) @map("pdf_generated")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

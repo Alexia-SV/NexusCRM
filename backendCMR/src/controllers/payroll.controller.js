@@ -15,6 +15,9 @@ async function updateReceipt(req, res) { res.json({ payroll: await payrollServic
 async function removeReceipt(req, res) { res.json({ payroll: await payrollService.removeReceipt(req.validated.params.id, req.validated.params.receiptId) }) }
 async function getReceipt(req, res) { res.json({ receipt: await payrollService.getReceipt(req.validated.params.receiptId) }) }
 
+// Reportes
+async function report(req, res) { res.json(await payrollService.report(req.validated.query)) }
+
 // Configuracion
 async function getConfig(_req, res) { res.json(await configService.getConfig()) }
 async function updateConfig(req, res) { res.json({ config: await configService.updateConfig(req.validated.body) }) }
@@ -22,5 +25,5 @@ async function updateConfig(req, res) { res.json({ config: await configService.u
 module.exports = {
   list, get, create, update, changeStatus, remove,
   generate, updateReceipt, removeReceipt, getReceipt,
-  getConfig, updateConfig,
+  report, getConfig, updateConfig,
 }

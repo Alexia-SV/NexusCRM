@@ -38,7 +38,11 @@ test('crea una nomina y genera un recibo por empleado activo', async (t) => {
   state.payrollId = created.id
   assert.equal(created.status, 'BORRADOR')
   assert.equal(created.receipts.length, state.activeCount)
+  assert.equal(created.pendingReceipts, 0) // todos los activos ya tienen recibo
   assert.ok(created.folio.startsWith('NOM-'))
+  // Cada recibo tiene aportaciones patronales y la cabecera suma el costo patronal
+  assert.ok(created.receipts.every((r) => r.patronTotal > 0))
+  assert.equal(created.totalEmployerCost, sum(created.receipts, 'patronTotal'))
   state.receiptId = created.receipts[0].id
 })
 
@@ -67,6 +71,28 @@ test('generar recibos de nuevo es idempotente', async (t) => {
   assert.equal(again.receipts.length, before.receipts.length)
 })
 
+test('captura de incapacidad calcula el subsidio IMSS informativo', async (t) => {
+  if (!state.canRun) return t.skip('Sin datos')
+  const updated = await payroll.updateReceipt(state.payrollId, state.receiptId, {
+    workedDays: 10, absentDays: 0, disabilityDays: 5, disabilityType: 'ENFERMEDAD_GENERAL',
+  })
+  const receipt = updated.receipts.find((r) => r.id === state.receiptId)
+  assert.equal(receipt.disabilityDays, 5)
+  assert.equal(receipt.disabilityType, 'ENFERMEDAD_GENERAL')
+  assert.ok(receipt.imssSubsidy > 0) // 60% del SBC por los dias posteriores a la espera
+  // El subsidio no altera el neto (lo paga el IMSS)
+  assert.equal(receipt.netPay, round2(receipt.totalPerceptions - receipt.totalDeductions))
+})
+
+test('el descuento INFONAVIT se topa al maximo configurado', async (t) => {
+  if (!state.canRun) return t.skip('Sin datos')
+  const updated = await payroll.updateReceipt(state.payrollId, state.receiptId, { workedDays: 15, infonavit: 999999 })
+  const receipt = updated.receipts.find((r) => r.id === state.receiptId)
+  assert.ok(receipt.infonavit > 0)
+  assert.ok(receipt.infonavit < 999999) // fue topado
+  assert.ok(receipt.infonavit <= round2(receipt.totalPerceptions * 0.30)) // nunca supera un % razonable de las percepciones
+})
+
 test('editar un recibo recalcula montos y totales', async (t) => {
   if (!state.canRun) return t.skip('Sin datos')
   const updated = await payroll.updateReceipt(state.payrollId, state.receiptId, {
@@ -89,6 +115,7 @@ test('quitar un recibo actualiza los totales', async (t) => {
   const after = await payroll.removeReceipt(state.payrollId, victim.id)
   assert.equal(after.receipts.length, before.receipts.length - 1)
   assert.equal(after.totalNet, sum(after.receipts, 'netPay'))
+  assert.equal(after.pendingReceipts, 1) // el empleado quitado queda pendiente
 })
 
 test('transicion de estado y bloqueo de edicion al pagar', async (t) => {
@@ -133,4 +160,16 @@ test('rechaza una nomina con periodo invertido', async (t) => {
   })
   state.createdIds.push(bad.id)
   assert.ok(new Date(bad.periodEnd) >= new Date(bad.periodStart))
+})
+
+test('el reporte agrupa por año, mes y bimestre', async () => {
+  const byYear = await payroll.report({ groupBy: 'year' })
+  assert.ok(Array.isArray(byYear.rows))
+  assert.ok('totalNet' in byYear.totals && 'totalEmployerCost' in byYear.totals)
+
+  const byBimester = await payroll.report({ groupBy: 'bimester', year: 2025 })
+  assert.ok(byBimester.rows.every((row) => row.label.startsWith('Bimestre')))
+
+  const byMonth = await payroll.report({ groupBy: 'month', year: 2025 })
+  assert.ok(byMonth.rows.every((row) => typeof row.totalNet === 'number' && typeof row.totalEmployerCost === 'number'))
 })

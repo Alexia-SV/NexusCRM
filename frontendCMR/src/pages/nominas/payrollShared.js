@@ -17,6 +17,12 @@ export const contractTypeLabels = {
   HONORARIOS: 'Honorarios',
 }
 
+export const disabilityTypeLabels = {
+  ENFERMEDAD_GENERAL: 'Enfermedad general',
+  RIESGO_TRABAJO: 'Riesgo de trabajo',
+  MATERNIDAD: 'Maternidad',
+}
+
 export const lockedStatuses = ['PAGADA', 'CANCELADA']
 
 export function formatMoney(value) {
