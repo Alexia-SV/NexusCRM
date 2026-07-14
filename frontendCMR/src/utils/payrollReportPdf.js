@@ -14,12 +14,34 @@ const COLORS = {
 
 const COLS = [
   { key: 'label', label: 'Periodo', x: 52 },
-  { key: 'payrolls', label: 'Nominas', right: 386, int: true },
-  { key: 'receipts', label: 'Recibos', right: 452, int: true },
-  { key: 'totalGross', label: 'Percepciones', right: 560, money: true },
-  { key: 'totalDeductions', label: 'Deducciones', right: 640, money: true },
-  { key: 'totalNet', label: 'Neto', right: 700, money: true },
+  { key: 'payrolls', label: 'Nominas', right: 310, int: true },
+  { key: 'receipts', label: 'Recibos', right: 360, int: true },
+  { key: 'totalGross', label: 'Percepciones', right: 470, money: true },
+  { key: 'totalDeductions', label: 'Deducciones', right: 570, money: true },
+  { key: 'totalNet', label: 'Neto', right: 650, money: true },
   { key: 'totalEmployerCost', label: 'Costo patronal', right: 746, money: true },
+]
+
+const EMPLOYEE_COLS = [
+  { key: 'employeeName', label: 'Empleado', x: 52 },
+  { key: 'receipts', label: 'Recibos', right: 300, int: true },
+  { key: 'workedDays', label: 'Dias', right: 356, int: true },
+  { key: 'absentDays', label: 'Faltas', right: 410, int: true },
+  { key: 'totalGross', label: 'Percepciones', right: 510, money: true },
+  { key: 'totalDeductions', label: 'Deducciones', right: 604, money: true },
+  { key: 'totalNet', label: 'Neto', right: 674, money: true },
+  { key: 'totalCompanyCost', label: 'Costo empresa', right: 746, money: true },
+]
+
+const INCIDENT_COLS = [
+  { key: 'employeeName', label: 'Empleado', x: 52 },
+  { key: 'incidentType', label: 'Incidencia', x: 205 },
+  { key: 'incidentDetail', label: 'Detalle', x: 300 },
+  { key: 'folio', label: 'Nomina', x: 470 },
+  { key: 'absentDays', label: 'Faltas', right: 585, int: true },
+  { key: 'disabilityDays', label: 'Incap.', right: 625, int: true },
+  { key: 'extraPerceptions', label: 'Extras', right: 685, money: true },
+  { key: 'netPay', label: 'Neto', right: 746, money: true },
 ]
 
 function toPdfText(value) {
@@ -71,56 +93,75 @@ function cellValue(col, row) {
   return String(row[col.key])
 }
 
-function drawHead(ops, y) {
+function drawHead(ops, y, cols) {
   ops.push(fillRect(PAGE.margin, y - 6, PAGE.width - PAGE.margin * 2, 20, COLORS.head))
-  for (const col of COLS) {
+  for (const col of cols) {
     if (col.x != null) ops.push(text(col.label, col.x, y, { size: 8.5, bold: true, color: COLORS.muted }))
     else ops.push(rightText(col.label, col.right, y, { size: 8.5, bold: true, color: COLORS.muted }))
   }
   return y - 22
 }
 
-function drawRow(ops, row, y) {
-  ops.push(text(clip(row.label, 40), COLS[0].x, y, { size: 9, color: COLORS.ink }))
-  for (const col of COLS.slice(1)) {
-    const color = col.key === 'totalDeductions' ? COLORS.muted : col.key === 'totalEmployerCost' ? COLORS.violet : COLORS.ink
-    ops.push(rightText(cellValue(col, row), col.right, y, { size: 9, bold: col.key === 'totalNet', color }))
+function drawRow(ops, row, y, cols) {
+  const first = cols[0]
+  ops.push(text(clip(row[first.key], 30), first.x, y, { size: 8.4, color: COLORS.ink }))
+  if (row.position || row.department) ops.push(text(clip(`${row.position || ''} / ${row.department || ''}`, 36), first.x, y - 9, { size: 6.5, color: COLORS.muted }))
+  for (const col of cols.slice(1)) {
+    const color = col.key === 'totalDeductions' || col.key === 'otherDeductions' ? COLORS.muted : col.key === 'totalEmployerCost' || col.key === 'totalCompanyCost' ? COLORS.violet : COLORS.ink
+    if (col.x != null) ops.push(text(clip(cellValue(col, row), col.key === 'incidentDetail' ? 28 : 18), col.x, y, { size: 7.8, color }))
+    else ops.push(rightText(cellValue(col, row), col.right, y, { size: 8, bold: col.key === 'totalNet' || col.key === 'netPay' || col.key === 'totalCompanyCost', color }))
   }
-  ops.push(line(PAGE.margin, y - 6, PAGE.width - PAGE.margin, y - 6, COLORS.line, 0.4))
+  ops.push(line(PAGE.margin, y - 12, PAGE.width - PAGE.margin, y - 12, COLORS.line, 0.4))
 }
 
 function header(ops, report, criterio) {
-  ops.push(fillRect(0, PAGE.height - 74, PAGE.width, 74, COLORS.navy))
-  ops.push(fillRect(0, PAGE.height - 78, PAGE.width, 4, COLORS.sky))
-  ops.push(text('Nexus CRM', PAGE.margin, PAGE.height - 30, { size: 11, bold: true, color: '226 232 240' }))
-  ops.push(text(`Reporte de nomina - ${criterio}`, PAGE.margin, PAGE.height - 52, { size: 20, bold: true, color: '255 255 255' }))
-  ops.push(text(`Anio: ${report.year || 'Todos'}   |   Generado: ${new Date().toLocaleDateString('es-MX')}`, PAGE.width - PAGE.margin - 260, PAGE.height - 52, { size: 9, color: '226 232 240' }))
-  return PAGE.height - 96
+  ops.push(fillRect(0, PAGE.height - 96, PAGE.width, 96, COLORS.navy))
+  ops.push(fillRect(0, PAGE.height - 100, PAGE.width, 4, COLORS.sky))
+  ops.push(text('Nexus CRM', PAGE.margin, PAGE.height - 28, { size: 11, bold: true, color: '226 232 240' }))
+  ops.push(text('Reporte de nomina', PAGE.margin, PAGE.height - 52, { size: 19, bold: true, color: '255 255 255' }))
+  ops.push(text(clip(criterio, 74), PAGE.margin, PAGE.height - 75, { size: 10, bold: true, color: '226 232 240' }))
+  ops.push(text(`Anio: ${report.year || 'Todos'} | Generado: ${new Date().toLocaleDateString('es-MX')}`, PAGE.width - PAGE.margin - 210, PAGE.height - 28, { size: 8.5, color: '226 232 240' }))
+  return PAGE.height - 122
+}
+
+function reportView(report, criterio) {
+  if (String(criterio).includes('Faltas')) {
+    return { cols: INCIDENT_COLS, rows: report.incidentRows || [], totals: null }
+  }
+  if (String(criterio).includes('empleado') || String(criterio).includes('empresa')) {
+    return { cols: EMPLOYEE_COLS, rows: report.employeeRows || [], totals: report.employeeTotals }
+  }
+  return { cols: COLS, rows: report.rows || [], totals: report.totals }
 }
 
 function buildPages(report, criterio) {
+  const view = reportView(report, criterio)
   const pages = []
   let ops = []
   let y = header(ops, report, criterio)
-  y = drawHead(ops, y)
+  y = drawHead(ops, y, view.cols)
 
-  for (const row of report.rows) {
+  for (const row of view.rows) {
     if (y < 70) {
       pages.push(ops); ops = []
       ops.push(fillRect(0, PAGE.height - 30, PAGE.width, 30, COLORS.navy))
       ops.push(text(`Nexus CRM - Reporte ${criterio} (continuacion)`, PAGE.margin, PAGE.height - 20, { size: 9, bold: true, color: '255 255 255' }))
       y = PAGE.height - 48
-      y = drawHead(ops, y)
+      y = drawHead(ops, y, view.cols)
     }
-    drawRow(ops, row, y)
-    y -= 18
+    drawRow(ops, row, y, view.cols)
+    y -= row.position || row.department ? 25 : 18
   }
 
-  if (y < 70) { pages.push(ops); ops = []; y = PAGE.height - 60; y = drawHead(ops, y) }
-  y -= 4
-  ops.push(fillRect(PAGE.margin, y - 8, PAGE.width - PAGE.margin * 2, 24, COLORS.navy))
-  ops.push(text('TOTALES', COLS[0].x, y, { size: 9, bold: true, color: '255 255 255' }))
-  for (const col of COLS.slice(1)) ops.push(rightText(cellValue(col, report.totals), col.right, y, { size: 9, bold: true, color: col.key === 'totalEmployerCost' ? '221 214 254' : '255 255 255' }))
+  if (view.totals) {
+    if (y < 70) { pages.push(ops); ops = []; y = PAGE.height - 60; y = drawHead(ops, y, view.cols) }
+    y -= 4
+    ops.push(fillRect(PAGE.margin, y - 8, PAGE.width - PAGE.margin * 2, 24, COLORS.navy))
+    ops.push(text('TOTALES', view.cols[0].x, y, { size: 9, bold: true, color: '255 255 255' }))
+    for (const col of view.cols.slice(1)) {
+      if (col.x == null) ops.push(rightText(cellValue(col, view.totals), col.right, y, { size: 9, bold: true, color: col.key === 'totalEmployerCost' || col.key === 'totalCompanyCost' ? '221 214 254' : '255 255 255' }))
+    }
+  }
   pages.push(ops)
   return pages
 }

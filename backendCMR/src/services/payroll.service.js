@@ -302,18 +302,172 @@ function groupInfo(groupBy, date) {
   return { key: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS[m]} ${y}`, sort: y * 100 + (m + 1) }
 }
 
-async function report({ groupBy = 'month', year, includeCancelled = false } = {}) {
+function paymentDateFilter({ year, month, bimester }) {
+  if (!year) return undefined
+  const startMonth = month ? month - 1 : bimester ? (bimester - 1) * 2 : 0
+  const endMonth = month ? month - 1 : bimester ? startMonth + 1 : 11
+  const start = new Date(Date.UTC(Number(year), startMonth, 1))
+  const end = new Date(Date.UTC(Number(year), endMonth + 1, 0))
+  return { gte: start, lte: end }
+}
+
+function periodLabel({ year, month, bimester }) {
+  if (year && month) return `${MONTHS[month - 1]} ${year}`
+  if (year && bimester) {
+    const start = (bimester - 1) * 2
+    return `Bimestre ${bimester} · ${MONTHS[start]}-${MONTHS[start + 1]} ${year}`
+  }
+  if (year) return String(year)
+  return 'Todos los periodos'
+}
+
+function incidentInfo(receipt) {
+  const parts = []
+  const types = []
+  if (Number(receipt.absentDays) > 0) {
+    types.push('Falta')
+    parts.push(`${receipt.absentDays} dia(s) de falta`)
+  }
+  if (Number(receipt.disabilityDays) > 0) {
+    const disabilityLabels = {
+      ENFERMEDAD_GENERAL: 'enfermedad general',
+      RIESGO_TRABAJO: 'riesgo de trabajo',
+      MATERNIDAD: 'maternidad',
+    }
+    types.push('Incapacidad')
+    parts.push(`${receipt.disabilityDays} dia(s) por ${disabilityLabels[receipt.disabilityType] || 'incapacidad'}`)
+  }
+  if (Number(receipt.extraPerceptions) > 0) {
+    types.push('Extra')
+    parts.push(`percepcion extra ${round2(Number(receipt.extraPerceptions))}`)
+  }
+  if (Number(receipt.otherDeductions) > 0) {
+    types.push('Descuento')
+    parts.push(`otros descuentos ${round2(Number(receipt.otherDeductions))}`)
+  }
+  return {
+    incidentType: types.join(' + '),
+    incidentDetail: parts.join(' · '),
+  }
+}
+
+function emptyDetailRow(receipt) {
+  return {
+    employeeId: receipt.employeeId,
+    employeeName: receipt.employeeName,
+    position: receipt.position,
+    department: receipt.department,
+    payrolls: new Set(),
+    receipts: 0,
+    workedDays: 0,
+    absentDays: 0,
+    disabilityDays: 0,
+    baseSalary: 0,
+    extraPerceptions: 0,
+    totalGross: 0,
+    imssTotal: 0,
+    isrWithholding: 0,
+    infonavit: 0,
+    savingsFund: 0,
+    otherDeductions: 0,
+    totalDeductions: 0,
+    totalNet: 0,
+    totalEmployerCost: 0,
+    totalCompanyCost: 0,
+  }
+}
+
+function serializeDetailRow(row) {
+  const data = { ...row, payrolls: row.payrolls.size }
+  for (const key of [
+    'workedDays', 'absentDays', 'disabilityDays', 'baseSalary', 'extraPerceptions', 'totalGross',
+    'imssTotal', 'isrWithholding', 'infonavit', 'savingsFund', 'otherDeductions',
+    'totalDeductions', 'totalNet', 'totalEmployerCost', 'totalCompanyCost',
+  ]) {
+    data[key] = round2(data[key])
+  }
+  return data
+}
+
+function detailTotals(rows) {
+  const totals = rows.reduce((acc, row) => ({
+    employees: acc.employees + 1,
+    payrolls: acc.payrolls + row.payrolls,
+    receipts: acc.receipts + row.receipts,
+    workedDays: acc.workedDays + row.workedDays,
+    absentDays: acc.absentDays + row.absentDays,
+    disabilityDays: acc.disabilityDays + row.disabilityDays,
+    baseSalary: acc.baseSalary + row.baseSalary,
+    extraPerceptions: acc.extraPerceptions + row.extraPerceptions,
+    totalGross: acc.totalGross + row.totalGross,
+    imssTotal: acc.imssTotal + row.imssTotal,
+    isrWithholding: acc.isrWithholding + row.isrWithholding,
+    infonavit: acc.infonavit + row.infonavit,
+    savingsFund: acc.savingsFund + row.savingsFund,
+    otherDeductions: acc.otherDeductions + row.otherDeductions,
+    totalDeductions: acc.totalDeductions + row.totalDeductions,
+    totalNet: acc.totalNet + row.totalNet,
+    totalEmployerCost: acc.totalEmployerCost + row.totalEmployerCost,
+    totalCompanyCost: acc.totalCompanyCost + row.totalCompanyCost,
+  }), {
+    employees: 0, payrolls: 0, receipts: 0, workedDays: 0, absentDays: 0, disabilityDays: 0,
+    baseSalary: 0, extraPerceptions: 0, totalGross: 0, imssTotal: 0, isrWithholding: 0,
+    infonavit: 0, savingsFund: 0, otherDeductions: 0, totalDeductions: 0, totalNet: 0,
+    totalEmployerCost: 0, totalCompanyCost: 0,
+  })
+  for (const key of Object.keys(totals)) totals[key] = round2(totals[key])
+  return totals
+}
+
+async function report({ groupBy = 'month', year, month, bimester, includeCancelled = false } = {}) {
+  const summaryGroupBy = groupBy === 'year' && year ? 'month' : groupBy
+  const paymentDate = paymentDateFilter({ year, month, bimester })
   const where = {
-    ...(year && { paymentDate: { gte: toDate(`${year}-01-01`), lte: toDate(`${year}-12-31`) } }),
+    ...(paymentDate && { paymentDate }),
     ...(!includeCancelled && { status: { not: 'CANCELADA' } }),
   }
   const payrolls = await prisma.payroll.findMany({
     where,
-    select: { paymentDate: true, totalGross: true, totalDeductions: true, totalNet: true, totalEmployerCost: true, receipts: { select: { id: true } } },
+    select: {
+      id: true,
+      folio: true,
+      periodType: true,
+      paymentDate: true,
+      totalGross: true,
+      totalDeductions: true,
+      totalNet: true,
+      totalEmployerCost: true,
+      receipts: {
+        select: {
+          id: true,
+          employeeId: true,
+          employeeName: true,
+          position: true,
+          department: true,
+          workedDays: true,
+          absentDays: true,
+          disabilityDays: true,
+          disabilityType: true,
+          baseSalary: true,
+          extraPerceptions: true,
+          totalPerceptions: true,
+          imssTotal: true,
+          isrWithholding: true,
+          infonavit: true,
+          savingsFund: true,
+          otherDeductions: true,
+          totalDeductions: true,
+          netPay: true,
+          patronTotal: true,
+        },
+      },
+    },
   })
   const groups = new Map()
+  const employeeGroups = new Map()
+  const incidentRows = []
   for (const payroll of payrolls) {
-    const info = groupInfo(groupBy, new Date(payroll.paymentDate))
+    const info = groupInfo(summaryGroupBy, new Date(payroll.paymentDate))
     const group = groups.get(info.key) || { key: info.key, label: info.label, sort: info.sort, payrolls: 0, receipts: 0, totalGross: 0, totalDeductions: 0, totalNet: 0, totalEmployerCost: 0 }
     group.payrolls += 1
     group.receipts += payroll.receipts.length
@@ -322,6 +476,47 @@ async function report({ groupBy = 'month', year, includeCancelled = false } = {}
     group.totalNet += Number(payroll.totalNet)
     group.totalEmployerCost += Number(payroll.totalEmployerCost)
     groups.set(info.key, group)
+
+    for (const receipt of payroll.receipts) {
+      const row = employeeGroups.get(receipt.employeeId) || emptyDetailRow(receipt)
+      row.payrolls.add(payroll.id)
+      row.receipts += 1
+      row.workedDays += Number(receipt.workedDays)
+      row.absentDays += Number(receipt.absentDays)
+      row.disabilityDays += Number(receipt.disabilityDays)
+      row.baseSalary += Number(receipt.baseSalary)
+      row.extraPerceptions += Number(receipt.extraPerceptions)
+      row.totalGross += Number(receipt.totalPerceptions)
+      row.imssTotal += Number(receipt.imssTotal)
+      row.isrWithholding += Number(receipt.isrWithholding)
+      row.infonavit += Number(receipt.infonavit)
+      row.savingsFund += Number(receipt.savingsFund)
+      row.otherDeductions += Number(receipt.otherDeductions)
+      row.totalDeductions += Number(receipt.totalDeductions)
+      row.totalNet += Number(receipt.netPay)
+      row.totalEmployerCost += Number(receipt.patronTotal)
+      row.totalCompanyCost += Number(receipt.netPay) + Number(receipt.patronTotal)
+      employeeGroups.set(receipt.employeeId, row)
+
+      if (Number(receipt.absentDays) > 0 || Number(receipt.disabilityDays) > 0 || Number(receipt.extraPerceptions) > 0 || Number(receipt.otherDeductions) > 0) {
+        const incident = incidentInfo(receipt)
+        incidentRows.push({
+          payrollId: payroll.id,
+          folio: payroll.folio,
+          paymentDate: payroll.paymentDate,
+          employeeName: receipt.employeeName,
+          department: receipt.department,
+          incidentType: incident.incidentType,
+          incidentDetail: incident.incidentDetail,
+          absentDays: receipt.absentDays,
+          disabilityDays: receipt.disabilityDays,
+          disabilityType: receipt.disabilityType,
+          extraPerceptions: Number(receipt.extraPerceptions),
+          otherDeductions: Number(receipt.otherDeductions),
+          netPay: Number(receipt.netPay),
+        })
+      }
+    }
   }
   const rows = [...groups.values()].sort((a, b) => a.sort - b.sort).map((group) => ({
     key: group.key,
@@ -342,7 +537,22 @@ async function report({ groupBy = 'month', year, includeCancelled = false } = {}
     totalEmployerCost: acc.totalEmployerCost + row.totalEmployerCost,
   }), { payrolls: 0, receipts: 0, totalGross: 0, totalDeductions: 0, totalNet: 0, totalEmployerCost: 0 })
   for (const key of ['totalGross', 'totalDeductions', 'totalNet', 'totalEmployerCost']) totals[key] = round2(totals[key])
-  return { groupBy, year: year || null, rows, totals }
+  const employeeRows = [...employeeGroups.values()]
+    .map(serializeDetailRow)
+    .sort((a, b) => b.totalCompanyCost - a.totalCompanyCost || a.employeeName.localeCompare(b.employeeName))
+  const employeeTotals = detailTotals(employeeRows)
+  return {
+    groupBy,
+    year: year || null,
+    month: month || null,
+    bimester: bimester || null,
+    periodLabel: periodLabel({ year, month, bimester }),
+    rows,
+    totals,
+    employeeRows,
+    employeeTotals,
+    incidentRows: incidentRows.sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate) || a.employeeName.localeCompare(b.employeeName)),
+  }
 }
 
 module.exports = {

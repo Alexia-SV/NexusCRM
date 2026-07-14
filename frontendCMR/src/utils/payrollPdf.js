@@ -118,7 +118,7 @@ function buildReceipt(receipt, payroll) {
   const q = CONTENT_WIDTH / 4
   field(ops, 'Del - al', `${dateText(payroll.periodStart)} - ${dateText(payroll.periodEnd)}`, PAGE.margin, y)
   field(ops, 'Pago', dateText(payroll.paymentDate), PAGE.margin + q * 2, y)
-  field(ops, 'Dias / faltas', `${receipt.workedDays} / ${receipt.absentDays}`, PAGE.margin + q * 3, y)
+  field(ops, 'Pagados / faltas', `${receipt.workedDays} / ${receipt.absentDays}`, PAGE.margin + q * 3, y)
   y -= 30
   field(ops, 'Salario diario', money(receipt.dailySalary), PAGE.margin, y)
   field(ops, 'SBC diario', money(receipt.sbc), PAGE.margin + q, y)
@@ -143,13 +143,14 @@ function buildReceipt(receipt, payroll) {
 
   const ly = boxTop - 42
   const step = 19
-  amountRow(ops, `Salario (${receipt.workedDays} dias)`, receipt.baseSalary, leftX, innerWidth, ly)
-  amountRow(ops, 'Aguinaldo prop.', receipt.aguinaldoProportional, leftX, innerWidth, ly - step)
-  amountRow(ops, 'Vacaciones prop.', receipt.vacationProportional, leftX, innerWidth, ly - step * 2)
-  amountRow(ops, 'Prima vacacional', receipt.vacationBonus, leftX, innerWidth, ly - step * 3)
-  amountRow(ops, 'Percepciones extra', receipt.extraPerceptions, leftX, innerWidth, ly - step * 4)
-  ops.push(line(leftX, ly - step * 5 + 12, leftX + innerWidth, ly - step * 5 + 12, COLORS.line))
-  amountRow(ops, 'Total percepciones', receipt.totalPerceptions, leftX, innerWidth, ly - step * 5 - 2, { strong: true })
+  amountRow(ops, `Salario pagado (${receipt.workedDays} dias)`, receipt.baseSalary, leftX, innerWidth, ly)
+  amountRow(ops, `Faltas no pagadas (${receipt.absentDays || 0} dias)`, Number(receipt.dailySalary || 0) * Number(receipt.absentDays || 0), leftX, innerWidth, ly - step, { negative: true })
+  amountRow(ops, 'Aguinaldo prop.', receipt.aguinaldoProportional, leftX, innerWidth, ly - step * 2)
+  amountRow(ops, 'Vacaciones prop.', receipt.vacationProportional, leftX, innerWidth, ly - step * 3)
+  amountRow(ops, 'Prima vacacional', receipt.vacationBonus, leftX, innerWidth, ly - step * 4)
+  amountRow(ops, 'Percepciones extra', receipt.extraPerceptions, leftX, innerWidth, ly - step * 5)
+  ops.push(line(leftX, ly - step * 6 + 12, leftX + innerWidth, ly - step * 6 + 12, COLORS.line))
+  amountRow(ops, 'Total percepciones', receipt.totalPerceptions, leftX, innerWidth, ly - step * 6 - 2, { strong: true })
 
   amountRow(ops, 'IMSS Enf. y Mat.', receipt.imssEnfMat, rightX, innerWidth, ly, { negative: true })
   amountRow(ops, 'IMSS Inv. y Vida', receipt.imssInvVida, rightX, innerWidth, ly - step, { negative: true })

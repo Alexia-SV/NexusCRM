@@ -17,6 +17,25 @@ before(async () => {
   state.canRun = config > 0 && state.activeCount > 0
 })
 
+test('el reporte mensual incluye desglose por empleado e incidencias', async () => {
+  const report = await payroll.report({ groupBy: 'month', year: 2025, month: 1 })
+  assert.ok(Array.isArray(report.employeeRows))
+  assert.ok(Array.isArray(report.incidentRows))
+  assert.equal(report.periodLabel, 'Enero 2025')
+  assert.ok('totalCompanyCost' in report.employeeTotals)
+  assert.ok(report.employeeRows.every((row) => typeof row.totalCompanyCost === 'number' && typeof row.absentDays === 'number'))
+})
+
+test('el reporte anual de un año se detalla por mes y las incidencias explican el motivo', async () => {
+  const annual = await payroll.report({ groupBy: 'year', year: 2026 })
+  assert.ok(annual.rows.every((row) => row.label.includes('2026')))
+  assert.ok(annual.rows.some((row) => row.label.startsWith('Enero')))
+
+  const bimester = await payroll.report({ groupBy: 'bimester', year: 2026, bimester: 2 })
+  assert.ok(bimester.totals.payrolls > 0)
+  assert.ok(bimester.incidentRows.every((row) => row.incidentType && row.incidentDetail))
+})
+
 after(async () => {
   if (state.createdIds.length) {
     await prisma.payroll.deleteMany({ where: { id: { in: state.createdIds } } })

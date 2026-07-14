@@ -23,6 +23,7 @@ const transitions = {
 }
 
 const numberInput = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-right focus:border-sky-400 focus:outline-none focus:ring-4 focus:ring-sky-100'
+const periodDays = { SEMANAL: 7, QUINCENAL: 15, MENSUAL: 30 }
 
 function Line({ label, value, negative = false, strong = false }) {
   return <div className="flex items-center justify-between py-1.5">
@@ -36,6 +37,7 @@ function Snap({ label, value }) {
 }
 
 function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
+  const defaultDays = periodDays[payroll.periodType] || receipt.workedDays
   const [form, setForm] = useState({
     workedDays: receipt.workedDays,
     absentDays: receipt.absentDays,
@@ -49,6 +51,19 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
   const [error, setError] = useState('')
 
   const set = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))
+  const clampDays = (value) => Math.max(0, Math.min(defaultDays, Number(value || 0)))
+  const setIncidentDays = (field) => (event) => {
+    const value = clampDays(event.target.value)
+    setForm((prev) => {
+      const absentDays = field === 'absentDays' ? value : clampDays(prev.absentDays)
+      const disabilityDays = field === 'disabilityDays' ? value : clampDays(prev.disabilityDays)
+      return {
+        ...prev,
+        [field]: value,
+        workedDays: Math.max(0, defaultDays - absentDays - disabilityDays),
+      }
+    })
+  }
 
   const save = async () => {
     setSaving(true); setError('')
@@ -101,17 +116,17 @@ function ReceiptModal({ receipt, payroll, editable, onClose, onSaved }) {
         {editable && <section className="rounded-xl border border-slate-100 bg-slate-50 p-4">
           <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500">Captura (recalcula al guardar)</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <label className="text-[11px] font-semibold uppercase text-slate-500">Días<input type="number" value={form.workedDays} onChange={set('workedDays')} className={`mt-1 ${numberInput}`} /></label>
-            <label className="text-[11px] font-semibold uppercase text-slate-500">Faltas<input type="number" value={form.absentDays} onChange={set('absentDays')} className={`mt-1 ${numberInput}`} /></label>
+            <label className="text-[11px] font-semibold uppercase text-slate-500">Días pagados<input type="number" value={form.workedDays} onChange={set('workedDays')} className={`mt-1 ${numberInput}`} /></label>
+            <label className="text-[11px] font-semibold uppercase text-slate-500">Faltas<input type="number" value={form.absentDays} onChange={setIncidentDays('absentDays')} className={`mt-1 ${numberInput}`} /></label>
             <label className="text-[11px] font-semibold uppercase text-slate-500">Extras<input type="number" step="0.01" value={form.extraPerceptions} onChange={set('extraPerceptions')} className={`mt-1 ${numberInput}`} /></label>
             <label className="text-[11px] font-semibold uppercase text-slate-500">INFONAVIT<input type="number" step="0.01" value={form.infonavit} onChange={set('infonavit')} className={`mt-1 ${numberInput}`} /></label>
             <label className="text-[11px] font-semibold uppercase text-slate-500">Otros desc.<input type="number" step="0.01" value={form.otherDeductions} onChange={set('otherDeductions')} className={`mt-1 ${numberInput}`} /></label>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="text-[11px] font-semibold uppercase text-slate-500">Días de incapacidad<input type="number" value={form.disabilityDays} onChange={set('disabilityDays')} className={`mt-1 ${numberInput}`} /></label>
+            <label className="text-[11px] font-semibold uppercase text-slate-500">Días de incapacidad<input type="number" value={form.disabilityDays} onChange={setIncidentDays('disabilityDays')} className={`mt-1 ${numberInput}`} /></label>
             <label className="text-[11px] font-semibold uppercase text-slate-500 sm:col-span-2">Tipo de incapacidad<select value={form.disabilityType} onChange={set('disabilityType')} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-4 focus:ring-sky-100"><option value="">Sin incapacidad</option><option value="ENFERMEDAD_GENERAL">Enfermedad general (subsidio 60% desde día 4)</option><option value="RIESGO_TRABAJO">Riesgo de trabajo (100% desde día 1)</option><option value="MATERNIDAD">Maternidad (100%)</option></select></label>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400">Los días de incapacidad no los paga la empresa; el IMSS cubre un subsidio (informativo). Captura en "Días" solo los días efectivamente trabajados.</p>
+          <p className="mt-2 text-[11px] text-slate-400">Periodo: {defaultDays} días. Faltas e incapacidad reducen automáticamente los días pagados; el subsidio IMSS por incapacidad es informativo.</p>
           <button onClick={save} disabled={saving} className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-400">{saving ? 'Recalculando...' : 'Recalcular y guardar'}</button>
         </section>}
 

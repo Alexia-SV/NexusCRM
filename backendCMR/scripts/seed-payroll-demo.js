@@ -47,11 +47,41 @@ async function makePayroll({ periodType, start, end, pay, savings = false, notes
   return result
 }
 
+async function ensureDemo2026Base(user) {
+  let created = 0
+  for (let month = 1; month <= 4; month++) {
+    const pay = `2026-${pad(month)}-28`
+    const exists = await prisma.payroll.count({
+      where: { periodType: 'MENSUAL', paymentDate: new Date(`${pay}T00:00:00.000Z`) },
+    })
+    if (exists > 0) continue
+    await makePayroll({
+      periodType: 'MENSUAL',
+      start: `2026-${pad(month)}-01`,
+      end: `2026-${pad(month)}-28`,
+      pay,
+      savings: true,
+      notes: `Nomina mensual demo ${pad(month)}/2026`,
+      finalStatus: 'PAGADA',
+      edits: month === 3 ? async (p) => {
+        const jose = p.receipts.find((r) => r.employeeName.includes('Hern'))
+        if (jose) await payroll.updateReceipt(p.id, jose.id, { workedDays: 27, absentDays: 1, disabilityDays: 0, extraPerceptions: 0, infonavit: 0, otherDeductions: 0 })
+      } : undefined,
+    }, user)
+    created++
+  }
+  return created
+}
+
 async function main() {
   const count = await prisma.payroll.count()
   if (count > 0) {
     if (process.env.RESET !== '1') {
-      console.log(`Ya existen ${count} nomina(s). Ejecuta con RESET=1 para borrarlas y recrear los datos demo.`)
+      const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+      const user = admin ? { id: admin.id, fullName: admin.fullName } : undefined
+      const created = await ensureDemo2026Base(user)
+      console.log(`Ya existen ${count} nomina(s). Se agregaron ${created} nomina(s) demo faltantes de enero-abril 2026.`)
+      console.log('Ejecuta con RESET=1 si quieres borrar y recrear todos los datos demo.')
       return
     }
     await prisma.payroll.deleteMany({})
@@ -86,6 +116,9 @@ async function main() {
     }
   }
   console.log(`Sembradas ${historicos} nominas mensuales pagadas (2024-2025).`)
+
+  const base2026 = await ensureDemo2026Base(user)
+  console.log(`Sembradas ${base2026} nominas mensuales demo de 2026 (enero-abril).`)
 
   // ── 2026: quincenales con estados variados + INCAPACIDAD ──
   // 1) Quincenal pagada con escenario de INCAPACIDAD (Jose, enfermedad general 5 dias)

@@ -19,12 +19,12 @@ const periodLabels = { SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Men
 // Columnas: right = borde derecho para montos alineados a la derecha.
 const COLS = [
   { key: 'employeeName', label: 'Empleado', x: 52 },
-  { key: 'workedDays', label: 'Dias', right: 240 },
-  { key: 'totalPerceptions', label: 'Percepciones', right: 320, money: true },
-  { key: 'imssTotal', label: 'IMSS', right: 382, money: true },
-  { key: 'isrWithholding', label: 'ISR', right: 444, money: true },
-  { key: 'totalDeductions', label: 'Deducciones', right: 508, money: true },
-  { key: 'netPay', label: 'Neto', right: 566, money: true },
+  { key: 'days', label: 'Dias/Faltas', right: 232 },
+  { key: 'baseSalary', label: 'Salario', right: 292, money: true },
+  { key: 'extraPerceptions', label: 'Extras', right: 350, money: true },
+  { key: 'totalDeductions', label: 'Deducc.', right: 414, money: true },
+  { key: 'netPay', label: 'Neto', right: 486, money: true },
+  { key: 'patronTotal', label: 'Costo pat.', right: 566, money: true },
 ]
 
 function toPdfText(value) {
@@ -96,13 +96,16 @@ function drawTableHead(ops, y) {
 }
 
 function drawRow(ops, receipt, y) {
-  ops.push(text(clip(receipt.employeeName, 30), COLS[0].x, y, { size: 8.5, color: COLORS.ink }))
-  ops.push(rightText(String(receipt.workedDays), COLS[1].right, y, { size: 8.5, color: COLORS.ink }))
+  ops.push(text(clip(receipt.employeeName, 27), COLS[0].x, y, { size: 8.5, color: COLORS.ink }))
+  ops.push(text(clip(`${receipt.position || ''} / ${receipt.department || ''}`, 34), COLS[0].x, y - 9, { size: 6.8, color: COLORS.muted }))
+  ops.push(rightText(`${receipt.workedDays}/${receipt.absentDays || 0}`, COLS[1].right, y, { size: 8.5, color: receipt.absentDays ? COLORS.rose : COLORS.ink }))
   for (const col of COLS.slice(2)) {
-    const color = col.key === 'netPay' ? COLORS.ink : col.key === 'totalDeductions' || col.key === 'imssTotal' || col.key === 'isrWithholding' ? COLORS.rose : COLORS.ink
+    const color = col.key === 'netPay' ? COLORS.ink : col.key === 'totalDeductions' ? COLORS.rose : col.key === 'patronTotal' ? COLORS.sky : COLORS.ink
     ops.push(rightText(money(receipt[col.key]), col.right, y, { size: 8.5, bold: col.key === 'netPay', color }))
   }
-  ops.push(line(PAGE.margin, y - 6, PAGE.width - PAGE.margin, y - 6, COLORS.line, 0.4))
+  const detail = `IMSS ${money(receipt.imssTotal)} | ISR ${money(receipt.isrWithholding)} | INFONAVIT ${money(receipt.infonavit)} | AFORE RCV ${money(receipt.rcvAforeTotal)}`
+  ops.push(text(detail, COLS[1].right + 12, y - 9, { size: 6.8, color: COLORS.muted }))
+  ops.push(line(PAGE.margin, y - 14, PAGE.width - PAGE.margin, y - 14, COLORS.line, 0.4))
 }
 
 function firstHeader(ops, payroll) {
@@ -133,14 +136,14 @@ function buildSummaryPages(payroll) {
   y = drawTableHead(ops, y)
 
   for (const receipt of payroll.receipts) {
-    if (y < 90) {
+    if (y < 96) {
       pages.push(ops)
       ops = []
       y = continuationHeader(ops, payroll)
       y = drawTableHead(ops, y)
     }
     drawRow(ops, receipt, y)
-    y -= 18
+    y -= 27
   }
 
   if (y < 96) { pages.push(ops); ops = []; y = continuationHeader(ops, payroll); y = drawTableHead(ops, y) }
@@ -150,8 +153,9 @@ function buildSummaryPages(payroll) {
   ops.push(fillRect(PAGE.margin, y - 8, PAGE.width - PAGE.margin * 2, 24, COLORS.navy))
   ops.push(text('TOTALES', COLS[0].x, y, { size: 9, bold: true, color: '255 255 255' }))
   ops.push(rightText(money(payroll.totalGross), COLS[2].right, y, { size: 9, bold: true, color: '255 255 255' }))
-  ops.push(rightText(money(payroll.totalDeductions), COLS[5].right, y, { size: 9, bold: true, color: '186 230 253' }))
-  ops.push(rightText(money(payroll.totalNet), COLS[6].right, y, { size: 9, bold: true, color: '255 255 255' }))
+  ops.push(rightText(money(payroll.totalDeductions), COLS[4].right, y, { size: 9, bold: true, color: '186 230 253' }))
+  ops.push(rightText(money(payroll.totalNet), COLS[5].right, y, { size: 9, bold: true, color: '255 255 255' }))
+  ops.push(rightText(money(payroll.totalEmployerCost), COLS[6].right, y, { size: 9, bold: true, color: '186 230 253' }))
 
   y -= 26
   ops.push(text(`Costo patronal de la corrida (aportaciones del empleador, no afectan el neto): ${money(payroll.totalEmployerCost)}`, PAGE.margin, y, { size: 8.5, color: COLORS.muted }))

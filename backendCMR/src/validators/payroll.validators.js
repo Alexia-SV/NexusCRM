@@ -96,7 +96,19 @@ const reportSchema = z.object({
   query: z.object({
     groupBy: z.enum(['month', 'year', 'bimester']).optional().default('month'),
     year: z.coerce.number().int().min(2000).max(2100).optional(),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+    bimester: z.coerce.number().int().min(1).max(6).optional(),
     includeCancelled: z.preprocess((value) => (value === 'true' ? true : value === 'false' ? false : value), z.boolean().optional().default(false)),
+  }).superRefine((data, ctx) => {
+    if (data.month && !data.year) {
+      ctx.addIssue({ code: 'custom', path: ['year'], message: 'Selecciona un año para consultar por mes' })
+    }
+    if (data.bimester && !data.year) {
+      ctx.addIssue({ code: 'custom', path: ['year'], message: 'Selecciona un año para consultar por bimestre' })
+    }
+    if (data.month && data.bimester) {
+      ctx.addIssue({ code: 'custom', path: ['month'], message: 'Usa mes o bimestre, no ambos' })
+    }
   }),
 })
 
