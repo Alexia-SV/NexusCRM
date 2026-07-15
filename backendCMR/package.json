@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
+    "seed:modules": "node scripts/seed-modules-demo.js",
     "seed:payroll": "node scripts/seed-payroll-demo.js",
     "db:verify": "node scripts/verify-db.js",
     "env:secrets": "node scripts/configure-dev-secrets.js"

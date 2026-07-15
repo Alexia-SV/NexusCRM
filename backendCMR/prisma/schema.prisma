@@ -53,6 +53,64 @@ enum PayrollDisabilityType {
   MATERNIDAD         @map("maternidad")
 }
 
+enum ProviderPersonType {
+  FISICA @map("fisica")
+  MORAL  @map("moral")
+}
+
+enum ProviderStatus {
+  EVALUACION @map("evaluacion")
+  ACTIVO     @map("activo")
+  INACTIVO   @map("inactivo")
+  BLOQUEADO  @map("bloqueado")
+}
+
+enum ProviderCategory {
+  MATERIALES @map("materiales")
+  SERVICIOS  @map("servicios")
+  EQUIPO     @map("equipo")
+  OTRO       @map("otro")
+}
+
+enum Currency {
+  MXN
+  USD
+}
+
+enum SupplyCategory {
+  MATERIAL    @map("material")
+  HERRAMIENTA @map("herramienta")
+  CONSUMIBLE  @map("consumible")
+  EQUIPO      @map("equipo")
+}
+
+enum SupplyStatus {
+  DISPONIBLE @map("disponible")
+  STOCK_BAJO @map("stock_bajo")
+  AGOTADO    @map("agotado")
+  INACTIVO   @map("inactivo")
+}
+
+enum InventoryMovementType {
+  ENTRADA @map("entrada")
+  SALIDA  @map("salida")
+  AJUSTE  @map("ajuste")
+}
+
+enum ProjectStatus {
+  PLANEACION @map("planeacion")
+  ACTIVO     @map("activo")
+  PAUSADO    @map("pausado")
+  COMPLETADO @map("completado")
+  CANCELADO  @map("cancelado")
+}
+
+enum ProjectPriority {
+  ALTA  @map("alta")
+  MEDIA @map("media")
+  BAJA  @map("baja")
+}
+
 model User {
   id                  String    @id @default(uuid()) @db.Uuid
   fullName            String    @map("full_name") @db.VarChar(150)
@@ -71,6 +129,9 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   payrolls            Payroll[]
+  providers           Provider[] @relation("ProviderCreatedBy")
+  inventoryMovements  InventoryMovement[] @relation("InventoryMovementRegisteredBy")
+  createdProjects     Project[] @relation("ProjectCreatedBy")
 
   @@index([role, active])
   @@map("users")
@@ -107,11 +168,146 @@ model Employee {
 
   user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   payrollReceipts PayrollReceipt[]
+  ledProjects     Project[]        @relation("ProjectLeader")
+  projectMembers  ProjectMember[]
 
   @@index([active])
   @@index([department])
   @@index([position])
   @@map("employees")
+}
+
+model Provider {
+  id                       String             @id @default(uuid()) @db.Uuid
+  businessName             String             @map("business_name") @db.VarChar(180)
+  rfc                      String             @unique @db.VarChar(13)
+  personType               ProviderPersonType @map("person_type")
+  taxRegime                String             @map("tax_regime") @db.VarChar(160)
+  curp                     String?            @db.Char(18)
+  category                 ProviderCategory
+  status                   ProviderStatus     @default(EVALUACION)
+  contactName              String             @map("contact_name") @db.VarChar(150)
+  contactPosition          String?            @map("contact_position") @db.VarChar(120)
+  phone                    String             @db.VarChar(30)
+  email                    String             @unique @db.VarChar(254)
+  website                  String?            @db.VarChar(300)
+  address                  String?
+  postalCode               String?            @map("postal_code") @db.VarChar(10)
+  cityState                String?            @map("city_state") @db.VarChar(160)
+  bankName                 String?            @map("bank_name") @db.VarChar(120)
+  clabe                    String?            @unique @db.Char(18)
+  accountNumber            String?            @map("account_number") @db.VarChar(40)
+  currency                 Currency           @default(MXN)
+  paymentTerms             String?            @map("payment_terms") @db.VarChar(120)
+  authorizedCredit         Decimal?           @map("authorized_credit") @db.Decimal(12, 2)
+  registeredAt             DateTime           @default(now()) @map("registered_at") @db.Timestamptz(3)
+  lastPurchaseAt           DateTime?          @map("last_purchase_at") @db.Timestamptz(3)
+  totalHistoricalPurchases Decimal            @default(0) @map("total_historical_purchases") @db.Decimal(14, 2)
+  rating                   Int?
+  internalNotes            String?            @map("internal_notes")
+  createdById              String?            @map("created_by_id") @db.Uuid
+  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User?    @relation("ProviderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  supplies  Supply[]
+
+  @@index([status])
+  @@index([category])
+  @@map("providers")
+}
+
+model Supply {
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String              @db.VarChar(160)
+  sku                String              @unique @db.VarChar(80)
+  description        String?
+  category           SupplyCategory
+  unit               String              @db.VarChar(40)
+  referenceUnitPrice Decimal?            @map("reference_unit_price") @db.Decimal(12, 2)
+  currentStock       Decimal             @default(0) @map("current_stock") @db.Decimal(12, 3)
+  minimumStock       Decimal             @default(0) @map("minimum_stock") @db.Decimal(12, 3)
+  maximumStock       Decimal?            @map("maximum_stock") @db.Decimal(12, 3)
+  status             SupplyStatus        @default(DISPONIBLE)
+  preferredProviderId String?            @map("preferred_provider_id") @db.Uuid
+  active             Boolean             @default(true)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  preferredProvider Provider?           @relation(fields: [preferredProviderId], references: [id], onDelete: SetNull)
+  movements         InventoryMovement[]
+
+  @@index([status])
+  @@index([category])
+  @@map("supplies")
+}
+
+model InventoryMovement {
+  id                 String                @id @default(uuid()) @db.Uuid
+  supplyId           String                @map("supply_id") @db.Uuid
+  type               InventoryMovementType
+  quantity           Decimal               @db.Decimal(12, 3)
+  realUnitPrice      Decimal?              @map("real_unit_price") @db.Decimal(12, 2)
+  totalCost          Decimal               @default(0) @map("total_cost") @db.Decimal(14, 2)
+  occurredAt         DateTime              @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  reason             String?               @db.VarChar(180)
+  projectId          String?               @map("project_id") @db.Uuid
+  registeredById     String?               @map("registered_by_id") @db.Uuid
+  resultingStock     Decimal               @map("resulting_stock") @db.Decimal(12, 3)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  supply       Supply   @relation(fields: [supplyId], references: [id], onDelete: Restrict)
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  registeredBy User?    @relation("InventoryMovementRegisteredBy", fields: [registeredById], references: [id], onDelete: SetNull)
+
+  @@index([supplyId])
+  @@index([projectId])
+  @@index([occurredAt])
+  @@map("inventory_movements")
+}
+
+model Project {
+  id                 String          @id @default(uuid()) @db.Uuid
+  name               String          @db.VarChar(180)
+  objective          String
+  clientName         String?         @map("client_name") @db.VarChar(180)
+  leaderId           String?         @map("leader_id") @db.Uuid
+  plannedStartDate   DateTime        @map("planned_start_date") @db.Date
+  plannedEndDate     DateTime        @map("planned_end_date") @db.Date
+  realStartDate      DateTime?       @map("real_start_date") @db.Date
+  realEndDate        DateTime?       @map("real_end_date") @db.Date
+  status             ProjectStatus   @default(PLANEACION)
+  estimatedBudget    Decimal         @default(0) @map("estimated_budget") @db.Decimal(14, 2)
+  realAccumulatedCost Decimal        @default(0) @map("real_accumulated_cost") @db.Decimal(14, 2)
+  progress           Decimal         @default(0) @db.Decimal(5, 2)
+  priority           ProjectPriority @default(MEDIA)
+  createdById        String?         @map("created_by_id") @db.Uuid
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leader             Employee?            @relation("ProjectLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  createdBy          User?                @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members            ProjectMember[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([status])
+  @@index([priority])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  employeeId          String   @map("employee_id") @db.Uuid
+  role                String   @db.VarChar(100)
+  assignedDailySalary Decimal  @map("assigned_daily_salary") @db.Decimal(12, 2)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, employeeId])
+  @@map("project_members")
 }
 
 // Parametros fiscales/prestaciones configurables (una sola fila activa).

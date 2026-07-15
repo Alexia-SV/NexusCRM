@@ -26,8 +26,8 @@ const navItems = [
   { label: 'Proyectos', to: '/proyectos', icon: 'projects', roles: permissions.proyectosRead, primary: true },
   { label: 'Proveedores', to: '/proveedores', icon: 'providers', roles: permissions.proveedoresRead, primary: true },
   { label: 'Nóminas', to: '/nominas', icon: 'payroll', roles: permissions.nominasRead },
-  { label: 'Insumos', to: '/insumos', icon: 'supplies', roles: permissions.dashboard },
-  { label: 'Reportes', to: '/reportes', icon: 'reports', roles: permissions.dashboard },
+  { label: 'Insumos', to: '/insumos', icon: 'supplies', roles: permissions.insumosRead },
+  { label: 'Reportes', to: '/reportes', icon: 'reports', roles: permissions.reportesRead },
 ]
 
 export default function Sidebar() {

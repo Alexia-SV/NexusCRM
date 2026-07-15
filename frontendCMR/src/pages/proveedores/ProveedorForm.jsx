@@ -1,119 +1,101 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useApp } from '../../context/AppContext'
+import { createProvider, getProvider, updateProvider } from '../../services/providers'
+import { getApiError } from '../../services/api'
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 transition-all placeholder-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100'
-const labelClass = 'mb-1.5 ml-1 block text-xs font-semibold uppercase tracking-wider text-slate-700'
-const errorClass = 'ml-1 mt-1 block text-[11px] font-medium text-red-500'
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100'
+const labelClass = 'mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-700'
+const errorClass = 'mt-1 block text-xs text-rose-600'
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 const defaults = {
-  tipo: 'cliente',
-  razon_social: '',
-  rfc: '',
-  tipo_persona: 'moral',
-  regimen_fiscal: '',
-  curp: '',
-  apellido_paterno: '',
-  apellido_materno: '',
-  contacto: '',
-  email: '',
-  telefono: '',
-  direccion: '',
-  colonia: '',
-  codigo_postal: '',
-  ciudad: '',
-  estado_ubicacion: '',
-  status: 'prospecto',
-  fecha_registro: new Date().toISOString().slice(0, 10),
-  ultima_actualizacion: new Date().toISOString().slice(0, 10),
-  notas_internas: '',
-  registrado_por: 'Administrador Nexus CRM',
-  segmento: '',
-  origen_cliente: '',
-  prioridad: 'media',
-  ejecutivo_asignado: '',
-  limite_credito: '',
-  condiciones_pago: '',
+  businessName: '', rfc: '', personType: 'MORAL', taxRegime: '', curp: '', category: 'MATERIALES', status: 'EVALUACION',
+  contactName: '', contactPosition: '', phone: '', email: '', website: '', address: '', postalCode: '', cityState: '',
+  bankName: '', clabe: '', accountNumber: '', currency: 'MXN', paymentTerms: 'Contado', authorizedCredit: '',
+  lastPurchaseAt: '', totalHistoricalPurchases: 0, rating: '', internalNotes: '',
 }
 
 function Section({ title, children }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"><h2 className="mb-5 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-800">{title}</h2><div className="grid grid-cols-1 gap-5 sm:grid-cols-2">{children}</div></section>
 }
 
-function Field({ label, name, register, errors, rules, type = 'text', placeholder, className = '', inputProps = {} }) {
-  return <div className={className}><label className={labelClass}>{label}</label><input type={type} placeholder={placeholder} className={inputClass} {...register(name, rules)} {...inputProps}/>{errors[name] && <span className={errorClass}>{errors[name].message}</span>}</div>
+function Field({ label, name, register, errors, rules, type = 'text', className = '', inputProps = {}, placeholder = '' }) {
+  return <div className={className}><label className={labelClass}>{label}</label><input type={type} placeholder={placeholder} className={inputClass} {...register(name, rules)} {...inputProps} />{errors[name] && <span className={errorClass}>{errors[name].message}</span>}</div>
 }
 
 export default function ProveedorForm() {
   const navigate = useNavigate()
   const { id } = useParams()
   const isEditing = Boolean(id)
-  const { proveedores, crearProveedor, editarProveedor } = useApp()
+  const [loading, setLoading] = useState(isEditing)
+  const [serverError, setServerError] = useState('')
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm({ defaultValues: defaults })
-  const tipoPersona = useWatch({ control, name: 'tipo_persona' })
+  const personType = useWatch({ control, name: 'personType' })
 
   useEffect(() => {
     if (!isEditing) return
-    const proveedor = proveedores.find((item) => item.id === Number(id))
-    if (proveedor) reset({ ...defaults, ...proveedor })
-  }, [id, isEditing, proveedores, reset])
+    getProvider(id).then((provider) => reset({
+      ...defaults,
+      ...provider,
+      lastPurchaseAt: provider.lastPurchaseAt ? provider.lastPurchaseAt.slice(0, 10) : '',
+      authorizedCredit: provider.authorizedCredit ?? '',
+      rating: provider.rating ?? '',
+    })).catch((error) => setServerError(getApiError(error, 'No fue posible cargar el proveedor.'))).finally(() => setLoading(false))
+  }, [id, isEditing, reset])
 
-  const onSubmit = async (data) => {
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    const payload = {
-      ...data,
-      ultima_actualizacion: new Date().toISOString().slice(0, 10),
-      curp: data.tipo_persona === 'fisica' ? data.curp : '',
+  const onSubmit = async (form) => {
+    setServerError('')
+    const payload = { ...form, curp: form.personType === 'FISICA' ? form.curp : '', website: form.website || undefined, authorizedCredit: form.authorizedCredit === '' ? undefined : Number(form.authorizedCredit), rating: form.rating === '' ? undefined : Number(form.rating), totalHistoricalPurchases: Number(form.totalHistoricalPurchases || 0) }
+    try {
+      if (isEditing) await updateProvider(id, payload)
+      else await createProvider(payload)
+      navigate('/proveedores')
+    } catch (error) {
+      setServerError(error.response?.data?.errors?.map((item) => item.message).join(' - ') || getApiError(error, 'No fue posible guardar el proveedor.'))
     }
-    if (isEditing) editarProveedor(id, payload)
-    else crearProveedor(payload)
-    navigate('/proveedores')
   }
 
-  return <div className="flex-1 overflow-y-auto p-4 md:p-8">
-    <div className="mb-8 flex items-center gap-4"><button onClick={() => navigate('/proveedores')} className="rounded-xl bg-white p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">←</button><div><h1 className="text-xl font-bold text-slate-900 md:text-2xl">{isEditing ? 'Editar cliente / proveedor' : 'Nuevo cliente / proveedor'}</h1><p className="mt-1 text-sm text-slate-500">Captura informacion fiscal, contacto, ubicacion y control interno.</p></div></div>
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-5xl space-y-6">
+  if (loading) return <div className="flex-1 p-8 text-sm text-slate-500">Cargando proveedor...</div>
+
+  return <div className="flex-1 overflow-y-auto p-4 md:p-8"><div className="max-w-5xl">
+    <div className="mb-8 flex items-center gap-4"><button onClick={() => navigate('/proveedores')} className="rounded-xl bg-white p-2 text-slate-500">←</button><div><h1 className="text-2xl font-bold text-slate-900">{isEditing ? 'Editar proveedor' : 'Nuevo proveedor'}</h1><p className="mt-1 text-sm text-slate-500">Identificacion fiscal, contacto, pagos y control interno.</p></div></div>
+    {serverError && <div className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{serverError}</div>}
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       <Section title="Identificacion fiscal">
-        <div><label className={labelClass}>Tipo de registro</label><select className={inputClass} {...register('tipo')}><option value="cliente">Cliente</option><option value="proveedor">Proveedor</option></select></div>
-        <div><label className={labelClass}>Tipo de persona</label><select className={inputClass} {...register('tipo_persona')}><option value="fisica">Fisica</option><option value="moral">Moral</option></select></div>
-        <Field label="Razon social" name="razon_social" register={register} errors={errors} placeholder="Empresa S.A. de C.V." className="sm:col-span-2" rules={{ required: 'La razon social es obligatoria' }}/>
-        <Field label="RFC" name="rfc" register={register} errors={errors} placeholder="AAA000000AAA" inputProps={{ maxLength: 13 }} rules={{ required: 'El RFC es obligatorio', minLength: { value: 12, message: 'Minimo 12 caracteres' }, maxLength: { value: 13, message: 'Maximo 13 caracteres' } }}/>
-        <Field label="Regimen fiscal" name="regimen_fiscal" register={register} errors={errors} placeholder="General de Ley Personas Morales"/>
-        {tipoPersona === 'fisica' && <><Field label="Apellido paterno" name="apellido_paterno" register={register} errors={errors} placeholder="Apellido paterno"/><Field label="Apellido materno" name="apellido_materno" register={register} errors={errors} placeholder="Apellido materno"/><Field label="CURP" name="curp" register={register} errors={errors} placeholder="AAAA000000HXXXXXX00" inputProps={{ maxLength: 18 }} rules={{ minLength: { value: 18, message: 'La CURP debe tener 18 caracteres' } }}/></>}
+        <Field label="Razon social" name="businessName" register={register} errors={errors} className="sm:col-span-2" rules={{ required: 'La razon social es obligatoria' }} />
+        <Field label="RFC" name="rfc" register={register} errors={errors} inputProps={{ maxLength: 13 }} rules={{ required: 'El RFC es obligatorio', pattern: { value: /^[A-Za-z&Ññ]{3,4}\d{6}[A-Za-z0-9]{3}$/, message: 'Formato RFC invalido' } }} />
+        <div><label className={labelClass}>Tipo de persona</label><select className={inputClass} {...register('personType')}><option value="FISICA">Fisica</option><option value="MORAL">Moral</option></select></div>
+        <Field label="Regimen fiscal" name="taxRegime" register={register} errors={errors} rules={{ required: 'El regimen fiscal es obligatorio' }} />
+        {personType === 'FISICA' && <Field label="CURP" name="curp" register={register} errors={errors} inputProps={{ maxLength: 18 }} rules={{ required: 'La CURP es obligatoria para persona fisica', pattern: { value: /^[A-Za-z][AEIOUXaeioux][A-Za-z]{2}\d{6}[HMhm][A-Za-z]{5}[A-Za-z0-9]\d$/, message: 'Formato CURP invalido' } }} />}
+        <div><label className={labelClass}>Giro / categoria</label><select className={inputClass} {...register('category')}><option value="MATERIALES">Materiales</option><option value="SERVICIOS">Servicios</option><option value="EQUIPO">Equipo</option><option value="OTRO">Otro</option></select></div>
+        <div><label className={labelClass}>Estado</label><select className={inputClass} {...register('status')}><option value="EVALUACION">En evaluacion</option><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option><option value="BLOQUEADO">Bloqueado</option></select></div>
       </Section>
-
       <Section title="Contacto y ubicacion">
-        <Field label="Nombre de contacto" name="contacto" register={register} errors={errors} placeholder="Nombre del responsable" rules={{ required: 'El contacto es obligatorio' }}/>
-        <Field label="Telefono" name="telefono" register={register} errors={errors} placeholder="2221234567" rules={{ required: 'El telefono es obligatorio' }}/>
-        <Field label="Correo electronico" name="email" type="email" register={register} errors={errors} placeholder="contacto@empresa.com" className="sm:col-span-2" rules={{ required: 'El correo es obligatorio' }}/>
-        <Field label="Direccion / calle" name="direccion" register={register} errors={errors} placeholder="Calle y numero" className="sm:col-span-2"/>
-        <Field label="Colonia" name="colonia" register={register} errors={errors} placeholder="Colonia"/>
-        <Field label="Codigo postal" name="codigo_postal" register={register} errors={errors} placeholder="72000" inputProps={{ maxLength: 5 }}/>
-        <Field label="Ciudad" name="ciudad" register={register} errors={errors} placeholder="Puebla"/>
-        <Field label="Estado" name="estado_ubicacion" register={register} errors={errors} placeholder="Puebla"/>
+        <Field label="Nombre de contacto" name="contactName" register={register} errors={errors} rules={{ required: 'El contacto es obligatorio' }} />
+        <Field label="Puesto del contacto" name="contactPosition" register={register} errors={errors} />
+        <Field label="Telefono" name="phone" register={register} errors={errors} rules={{ required: 'El telefono es obligatorio' }} />
+        <Field label="Correo electronico" name="email" type="email" register={register} errors={errors} rules={{ required: 'El correo es obligatorio', pattern: { value: emailPattern, message: 'Correo invalido' } }} />
+        <Field label="Sitio web" name="website" register={register} errors={errors} placeholder="https://empresa.com" />
+        <Field label="Codigo postal" name="postalCode" register={register} errors={errors} inputProps={{ maxLength: 10 }} />
+        <Field label="Ciudad / Estado" name="cityState" register={register} errors={errors} />
+        <Field label="Direccion" name="address" register={register} errors={errors} className="sm:col-span-2" />
       </Section>
-
+      <Section title="Datos de pago">
+        <Field label="Banco" name="bankName" register={register} errors={errors} />
+        <Field label="CLABE interbancaria" name="clabe" register={register} errors={errors} inputProps={{ maxLength: 18, inputMode: 'numeric' }} rules={{ pattern: { value: /^\d{18}$/, message: 'La CLABE debe tener 18 digitos' } }} />
+        <Field label="Numero de cuenta" name="accountNumber" register={register} errors={errors} />
+        <div><label className={labelClass}>Moneda</label><select className={inputClass} {...register('currency')}><option value="MXN">MXN</option><option value="USD">USD</option></select></div>
+        <Field label="Condiciones de pago" name="paymentTerms" register={register} errors={errors} placeholder="Contado / 15 dias / 30 dias" />
+        <Field label="Credito autorizado" name="authorizedCredit" type="number" register={register} errors={errors} />
+      </Section>
       <Section title="Control interno">
-        <div><label className={labelClass}>Estado</label><select className={inputClass} {...register('status')}><option value="prospecto">Prospecto</option><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="bloqueado">Bloqueado</option></select></div>
-        <Field label="Registrado por" name="registrado_por" register={register} errors={errors}/>
-        <Field label="Fecha de registro" name="fecha_registro" type="date" register={register} errors={errors}/>
-        <Field label="Ultima actualizacion" name="ultima_actualizacion" type="date" register={register} errors={errors}/>
-        <div className="sm:col-span-2"><label className={labelClass}>Notas internas</label><textarea rows={4} placeholder="Notas comerciales, pagos, restricciones o seguimiento..." className={`${inputClass} resize-none`} {...register('notas_internas')}/></div>
+        <Field label="Ultima compra" name="lastPurchaseAt" type="date" register={register} errors={errors} />
+        <Field label="Total compras historicas" name="totalHistoricalPurchases" type="number" register={register} errors={errors} />
+        <Field label="Calificacion (1-5)" name="rating" type="number" register={register} errors={errors} inputProps={{ min: 1, max: 5 }} />
+        <div className="sm:col-span-2"><label className={labelClass}>Notas internas</label><textarea rows={4} className={`${inputClass} resize-none`} {...register('internalNotes')} /></div>
       </Section>
-
-      <Section title="Propuesta del equipo">
-        <Field label="Segmento" name="segmento" register={register} errors={errors} placeholder="Corporativo, pyme, gobierno..."/>
-        <Field label="Origen del cliente" name="origen_cliente" register={register} errors={errors} placeholder="Referido, web, llamada, evento..."/>
-        <div><label className={labelClass}>Prioridad comercial</label><select className={inputClass} {...register('prioridad')}><option value="baja">Baja</option><option value="media">Media</option><option value="alta">Alta</option><option value="critica">Critica</option></select></div>
-        <Field label="Ejecutivo asignado" name="ejecutivo_asignado" register={register} errors={errors} placeholder="Responsable interno"/>
-        <Field label="Limite de credito" name="limite_credito" type="number" register={register} errors={errors} placeholder="50000"/>
-        <Field label="Condiciones de pago" name="condiciones_pago" register={register} errors={errors} placeholder="Contado, 15 dias, 30 dias..."/>
-      </Section>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm"><h2 className="mb-3 text-sm font-semibold text-slate-800">Estados posibles</h2><div className="flex flex-wrap gap-2"><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">Prospecto</span><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Activo</span><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">Inactivo</span><span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">Bloqueado</span></div><div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2"><p>Prospecto: cotizacion enviada, sin proyecto aun.</p><p>Activo: tiene al menos un proyecto en curso.</p><p>Inactivo: sin proyectos activos en 6 meses.</p><p>Bloqueado: problema de pago o conflicto.</p></div></div>
-
-      <div className="flex flex-col-reverse gap-3 pb-6 sm:flex-row"><button type="button" onClick={() => navigate('/proveedores')} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm text-slate-600">Cancelar</button><button disabled={isSubmitting} className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-medium text-white disabled:bg-slate-400">{isSubmitting ? 'Guardando...' : 'Guardar registro'}</button></div>
+      <div className="flex flex-col-reverse gap-3 pb-6 sm:flex-row"><button type="button" onClick={() => navigate('/proveedores')} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm text-slate-600">Cancelar</button><button disabled={isSubmitting} className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-medium text-white disabled:bg-slate-400">{isSubmitting ? 'Guardando...' : 'Guardar proveedor'}</button></div>
     </form>
-  </div>
+  </div></div>
 }

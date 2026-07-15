@@ -1,186 +1,54 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { proyectosMock, usuariosMock } from '../../data/mockData'
-import { useAuth } from '../../context/AuthContext'
 import { permissions } from '../../auth/permissions'
+import { useAuth } from '../../context/AuthContext'
+import { getProject } from '../../services/projects'
+import { getApiError } from '../../services/api'
 
-const statusConfig = {
-  planificacion: { label: 'Planificación', class: 'bg-amber-50 text-amber-700',     dot: 'bg-amber-400' },
-  activo:        { label: 'Activo',        class: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  pausado:       { label: 'Pausado',       class: 'bg-slate-100 text-slate-500',    dot: 'bg-slate-400' },
-  completado:    { label: 'Completado',    class: 'bg-sky-50 text-sky-700',         dot: 'bg-sky-500' },
+const statusLabels = { PLANEACION: 'Planeacion', ACTIVO: 'Activo', PAUSADO: 'Pausado', COMPLETADO: 'Completado', CANCELADO: 'Cancelado' }
+const statusClass = { PLANEACION: 'bg-amber-50 text-amber-700', ACTIVO: 'bg-emerald-50 text-emerald-700', PAUSADO: 'bg-slate-100 text-slate-500', COMPLETADO: 'bg-sky-50 text-sky-700', CANCELADO: 'bg-rose-50 text-rose-700' }
+
+function money(value) {
+  return Number(value || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 }
 
-const rolColors = {
-  supervisor:    'bg-violet-50 text-violet-700',
-  desarrollador: 'bg-sky-50 text-sky-700',
-  diseñador:     'bg-pink-50 text-pink-700',
-  colaborador:   'bg-slate-100 text-slate-600',
-  lider:         'bg-amber-50 text-amber-700',
+function date(value) {
+  if (!value) return 'Sin fecha'
+  return new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+function fullName(employee) {
+  return [employee?.firstName, employee?.paternalLastName, employee?.maternalLastName].filter(Boolean).join(' ')
+}
+
+function Field({ label, value }) {
+  return <div><dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</dt><dd className="mt-1 text-sm text-slate-700 break-words">{value || 'Sin registrar'}</dd></div>
 }
 
 export default function ProyectoDetail() {
-  const { can } = useAuth()
+  const { id } = useParams()
   const navigate = useNavigate()
-  const { id }   = useParams()
-  const proyecto = proyectosMock.find((p) => p.id === Number(id))
+  const { can } = useAuth()
+  const [project, setProject] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  if (!proyecto) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="text-center">
-          <p className="text-slate-500 text-sm">Proyecto no encontrado</p>
-          <button onClick={() => navigate('/proyectos')} className="mt-4 text-sky-600 text-sm underline">
-            Volver a proyectos
-          </button>
-        </div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    getProject(id).then(setProject).catch((requestError) => setError(getApiError(requestError, 'No fue posible cargar el proyecto.'))).finally(() => setLoading(false))
+  }, [id])
 
-  const cfg          = statusConfig[proyecto.status] || statusConfig.pausado
-  const totalNomina  = proyecto.involucrados.reduce((acc, i) => acc + i.salario_asignado, 0)
-  const diasRestantes = Math.ceil((new Date(proyecto.fecha_fin) - new Date()) / (1000 * 60 * 60 * 24))
+  if (loading) return <div className="flex-1 p-8 text-sm text-slate-500">Cargando proyecto...</div>
+  if (error || !project) return <div className="flex-1 p-8"><p className="text-sm text-rose-600">{error || 'Proyecto no encontrado'}</p><button onClick={() => navigate('/proyectos')} className="mt-4 text-sm text-sky-700 underline">Volver a proyectos</button></div>
 
-  const formatFecha = (f) => new Date(f).toLocaleDateString('es-MX', {
-    day: 'numeric', month: 'long', year: 'numeric'
-  })
+  const memberCost = project.members.reduce((acc, member) => acc + Number(member.assignedDailySalary || 0), 0)
+  const inventoryCost = project.inventoryMovements.reduce((acc, movement) => acc + Number(movement.totalCost || 0), 0)
 
-  return (
-    <div className="flex-1 p-4 md:p-8 overflow-y-auto">
-
-      {/* Header */}
-      <div className="flex flex-wrap items-start gap-3 sm:gap-4 mb-8">
-        <button
-          onClick={() => navigate('/proyectos')}
-          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all mt-1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-          </svg>
-        </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-slate-900">{proyecto.nombre}</h1>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${cfg.class}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-              {cfg.label}
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 mt-1">{proyecto.objetivo}</p>
-        </div>
-        <button
-          onClick={() => navigate(`/proyectos/editar/${proyecto.id}`)}
-          className={`${can(permissions.proyectosWrite) ? 'flex' : 'hidden'} w-full sm:w-auto justify-center items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-          </svg>
-          Editar
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* Columna izquierda */}
-        <div className="lg:col-span-2 space-y-5">
-
-          {/* Info general */}
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4 pb-3 border-b border-slate-100">
-              Información general
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Meta</p>
-                <p className="text-sm text-slate-700">{proyecto.meta}</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Fecha inicio</p>
-                  <p className="text-sm text-slate-700">{formatFecha(proyecto.fecha_inicio)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Fecha fin</p>
-                  <p className="text-sm text-slate-700">{formatFecha(proyecto.fecha_fin)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Equipo */}
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4 pb-3 border-b border-slate-100">
-              Equipo involucrado
-            </h2>
-            <div className="space-y-3">
-              {proyecto.involucrados.map((inv) => {
-                const emp = usuariosMock.find((u) => u.id === inv.empleado_id)
-                if (!emp) return null
-                const initials = `${emp.nombre[0]}${emp.apellido_paterno[0]}`.toUpperCase()
-                const colors   = ['bg-sky-100 text-sky-700','bg-violet-100 text-violet-700','bg-emerald-100 text-emerald-700','bg-amber-100 text-amber-700']
-                const color    = colors[(emp.nombre.charCodeAt(0) + emp.apellido_paterno.charCodeAt(0)) % colors.length]
-                const rolClass = rolColors[inv.rol] || rolColors.colaborador
-
-                return (
-                  <div key={inv.empleado_id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${color}`}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {emp.nombre} {emp.apellido_paterno} {emp.apellido_materno}
-                      </p>
-                      <p className="text-xs text-slate-400">{emp.puesto} · {emp.email}</p>
-                    </div>
-                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize ${rolClass}`}>
-                      {inv.rol}
-                    </span>
-                    <span className="text-sm font-bold text-slate-700 min-w-[80px] text-right">
-                      ${inv.salario_asignado.toLocaleString('es-MX')}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Columna derecha — resumen */}
-        <div className="space-y-5">
-
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-700 pb-3 border-b border-slate-100">
-              Resumen
-            </h2>
-
-            <div className="bg-slate-50 rounded-xl p-4 text-center">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Nómina mensual</p>
-              <p className="text-2xl font-bold text-slate-900">${totalNomina.toLocaleString('es-MX')}</p>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-4 text-center">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                {proyecto.status === 'completado' ? 'Estado' : diasRestantes < 0 ? 'Vencido hace' : 'Días restantes'}
-              </p>
-              <p className={`text-2xl font-bold ${
-                proyecto.status === 'completado' ? 'text-sky-600'
-                : diasRestantes < 0 ? 'text-rose-500'
-                : diasRestantes < 30 ? 'text-amber-500'
-                : 'text-slate-900'
-              }`}>
-                {proyecto.status === 'completado' ? '✓ Listo' : Math.abs(diasRestantes)}
-              </p>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-4 text-center">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Integrantes</p>
-              <p className="text-2xl font-bold text-slate-900">{proyecto.involucrados.length}</p>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  )
+  return <div className="flex-1 overflow-y-auto p-4 md:p-8">
+    <div className="mb-8 flex flex-wrap items-start gap-3 sm:gap-4"><button onClick={() => navigate('/proyectos')} className="mt-1 rounded-xl bg-white p-2 text-slate-500">←</button><div className="flex-1"><div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-bold text-slate-900">{project.name}</h1><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClass[project.status]}`}>{statusLabels[project.status]}</span></div><p className="mt-1 text-sm text-slate-500">{project.objective}</p></div>{can(permissions.proyectosWrite) && <button onClick={() => navigate(`/proyectos/editar/${project.id}`)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600">Editar</button>}</div>
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="mb-4 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700">Informacion general</h2><dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Cliente" value={project.clientName} /><Field label="Lider" value={fullName(project.leader)} /><Field label="Inicio planeado" value={date(project.plannedStartDate)} /><Field label="Fin planeado" value={date(project.plannedEndDate)} /><Field label="Inicio real" value={date(project.realStartDate)} /><Field label="Fin real" value={date(project.realEndDate)} /><Field label="Prioridad" value={project.priority} /><Field label="Avance" value={`${project.progress}%`} /></dl></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="mb-4 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700">Involucrados</h2>{project.members.length === 0 ? <p className="text-sm text-slate-500">Sin involucrados.</p> : <div className="space-y-3">{project.members.map((member) => <article key={member.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-slate-800">{fullName(member.employee)}</p><p className="text-xs text-slate-400">{member.employee?.position} - {member.role}</p></div><p className="text-sm font-bold text-slate-700">{money(member.assignedDailySalary)} diario</p></article>)}</div>}</section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="mb-4 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700">Insumos usados</h2>{project.inventoryMovements.length === 0 ? <p className="text-sm text-slate-500">Sin salidas de inventario relacionadas.</p> : <div className="space-y-3">{project.inventoryMovements.map((movement) => <article key={movement.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-slate-800">{movement.supply?.name}</p><p className="text-xs text-slate-400">{movement.type} - {movement.quantity}</p></div><p className="text-sm font-bold text-slate-700">{money(movement.totalCost)}</p></article>)}</div>}</section>
+    </div><aside className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="mb-4 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700">Resumen</h2><div className="space-y-3"><div className="rounded-xl bg-slate-50 p-4 text-center"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Presupuesto</p><p className="mt-1 text-xl font-bold text-slate-900">{money(project.estimatedBudget)}</p></div><div className="rounded-xl bg-slate-50 p-4 text-center"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Costo insumos</p><p className="mt-1 text-xl font-bold text-slate-900">{money(inventoryCost)}</p></div><div className="rounded-xl bg-slate-50 p-4 text-center"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Equipo diario</p><p className="mt-1 text-xl font-bold text-slate-900">{money(memberCost)}</p></div></div></section></aside></div>
+  </div>
 }
