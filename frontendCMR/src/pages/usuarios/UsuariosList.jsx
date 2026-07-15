@@ -33,34 +33,6 @@ function Info({ label, value, wide = false }) {
   return <div className={wide ? 'sm:col-span-2' : ''}><dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</dt><dd className="mt-1 text-sm text-slate-700 break-words">{value || 'Sin registrar'}</dd></div>
 }
 
-const demoEmployee = {
-  id: 'demo-valeria-3-years',
-  firstName: 'Valeria',
-  paternalLastName: 'Santos',
-  maternalLastName: 'Mendoza',
-  curp: 'SAMV930420MPLNLD04',
-  rfc: 'SAMV9304208Q1',
-  nss: '45890123764',
-  birthDate: '1993-04-20',
-  sex: 'FEMENINO',
-  maritalStatus: 'CASADO',
-  phone: '2224456677',
-  personalEmail: 'valeria.santos.personal@example.com',
-  institutionalEmail: 'valeria.santos@nexuscrm.local',
-  address: 'Circuito Juan Pablo II 2401, Puebla',
-  position: 'Consultora senior',
-  department: 'Consultoria y operaciones',
-  hireDate: '2023-06-12',
-  contractType: 'BASE',
-  dailySalary: 1450,
-  integratedImssSalary: 1588.75,
-  bankName: 'Santander Mexico',
-  clabe: '014180123456789012',
-  active: true,
-  user: null,
-  isDemo: true,
-}
-
 function normalize(value) {
   return String(value || '').trim().toLowerCase()
 }
@@ -106,19 +78,6 @@ function inPeriod(value, period) {
   if (!cutoff) return true
   const date = new Date(value)
   return Number.isFinite(date.getTime()) && date >= cutoff
-}
-
-function filterDemoEmployee(filters) {
-  const query = normalize(filters.search)
-  const matchesSearch = !query || [
-    fullName(demoEmployee),
-    demoEmployee.curp,
-    demoEmployee.position,
-    demoEmployee.department,
-    demoEmployee.institutionalEmail,
-  ].some((value) => normalize(value).includes(query))
-  const matchesActive = !filters.active || String(demoEmployee.active) === filters.active
-  return matchesSearch && matchesActive
 }
 
 function buildConsultationRecords({ employeeProjects, employeeQuotes, employeeNotes, flexibleRecords, formatMoney }) {
@@ -310,7 +269,7 @@ export default function UsuariosList() {
     try {
       const filters = { search: search || undefined, active: active || undefined }
       const apiEmployees = await listEmployees(filters)
-      setEmployees(filterDemoEmployee({ search, active }) ? [...apiEmployees, demoEmployee] : apiEmployees)
+      setEmployees(apiEmployees)
     }
     catch (requestError) { setError(getApiError(requestError, 'No fue posible cargar los empleados.')) }
     finally { setLoading(false) }

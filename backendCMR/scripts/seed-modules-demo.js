@@ -29,6 +29,22 @@ async function upsertProvider(data) {
   })
 }
 
+async function userByEmail(email) {
+  return prisma.user.findUnique({ where: { email } })
+}
+
+async function upsertEmployee(data) {
+  const { userEmail, ...employeeData } = data
+  const user = userEmail ? await userByEmail(userEmail) : null
+  const current = await prisma.employee.findUnique({ where: { curp: employeeData.curp } })
+  const payload = { ...employeeData, userId: user?.id || current?.userId || undefined }
+  return prisma.employee.upsert({
+    where: { curp: employeeData.curp },
+    update: payload,
+    create: payload,
+  })
+}
+
 async function upsertSupply(data) {
   const payload = {
     ...data,
@@ -98,6 +114,114 @@ async function createMovementOnce({ supply, project, type, quantity, realUnitPri
 
 async function main() {
   const admin = await prisma.user.findFirst({ where: { role: 'ADMIN', active: true } })
+
+  await Promise.all([
+    upsertEmployee({
+      userEmail: 'admin@nexuscrm.local',
+      firstName: 'Ana',
+      paternalLastName: 'Lopez',
+      maternalLastName: 'Perez',
+      curp: 'LOPE900101HDFPRD01',
+      rfc: 'LOPE900101AB1',
+      nss: '12345678901',
+      birthDate: date('1990-01-01'),
+      sex: 'FEMENINO',
+      maritalStatus: 'SOLTERO',
+      phone: '2225550101',
+      personalEmail: 'ana.lopez.personal@nexuscrm.local',
+      institutionalEmail: 'ana.lopez@nexuscrm.local',
+      address: 'Av. Juarez 1201, Puebla, Puebla',
+      position: 'Administradora general',
+      department: 'Direccion',
+      hireDate: date('2024-01-15'),
+      contractType: 'BASE',
+      dailySalary: 950,
+      integratedImssSalary: 1042.94,
+      bankName: 'BBVA Mexico',
+      clabe: '012180000001234567',
+      afore: 'XXI Banorte',
+      active: true,
+    }),
+    upsertEmployee({
+      userEmail: 'operativo@nexuscrm.local',
+      firstName: 'Jose',
+      paternalLastName: 'Hernandez',
+      maternalLastName: 'Cruz',
+      curp: 'HECJ880630HDFRRL03',
+      rfc: 'HECJ880630K92',
+      nss: '23456789012',
+      birthDate: date('1988-06-30'),
+      sex: 'MASCULINO',
+      maritalStatus: 'CASADO',
+      phone: '2225550102',
+      personalEmail: 'jose.hernandez.personal@nexuscrm.local',
+      institutionalEmail: 'jose.hernandez@nexuscrm.local',
+      address: 'Calle Reforma 45, Puebla, Puebla',
+      position: 'Auxiliar operativo',
+      department: 'Operaciones',
+      hireDate: date('2024-03-01'),
+      contractType: 'BASE',
+      dailySalary: 520,
+      integratedImssSalary: 570.85,
+      bankName: 'Santander Mexico',
+      clabe: '014180000001234568',
+      afore: 'Profuturo',
+      active: true,
+    }),
+    upsertEmployee({
+      userEmail: 'lider@nexuscrm.local',
+      firstName: 'Maria',
+      paternalLastName: 'Ramirez',
+      maternalLastName: 'Garcia',
+      curp: 'MARG920215MPLRRS02',
+      rfc: 'MARG920215T18',
+      nss: '34567890123',
+      birthDate: date('1992-02-15'),
+      sex: 'FEMENINO',
+      maritalStatus: 'UNION_LIBRE',
+      phone: '2225550103',
+      personalEmail: 'maria.ramirez.personal@nexuscrm.local',
+      institutionalEmail: 'maria.ramirez@nexuscrm.local',
+      address: 'Privada Central 88, Cholula, Puebla',
+      position: 'Lider de proyectos',
+      department: 'Proyectos',
+      hireDate: date('2023-08-10'),
+      contractType: 'BASE',
+      dailySalary: 820,
+      integratedImssSalary: 900.33,
+      bankName: 'Banorte',
+      clabe: '072180000001234569',
+      afore: 'Citibanamex Afore',
+      active: true,
+    }),
+    upsertEmployee({
+      userEmail: 'contador@nexuscrm.local',
+      firstName: 'Sofia',
+      paternalLastName: 'Gomez',
+      maternalLastName: 'Martinez',
+      curp: 'GOMS950410MPLNZR04',
+      rfc: 'GOMS950410P55',
+      nss: '45678901234',
+      birthDate: date('1995-04-10'),
+      sex: 'FEMENINO',
+      maritalStatus: 'SOLTERO',
+      phone: '2225550104',
+      personalEmail: 'sofia.gomez.personal@nexuscrm.local',
+      institutionalEmail: 'sofia.gomez@nexuscrm.local',
+      address: 'Blvd. Atlixco 530, Puebla, Puebla',
+      position: 'Contadora',
+      department: 'Contabilidad',
+      hireDate: date('2024-05-20'),
+      contractType: 'BASE',
+      dailySalary: 760,
+      integratedImssSalary: 834.21,
+      bankName: 'HSBC Mexico',
+      clabe: '021180000001234560',
+      afore: 'SURA',
+      active: true,
+    }),
+  ])
+
   const employees = await prisma.employee.findMany({ where: { active: true }, take: 3, orderBy: { firstName: 'asc' } })
 
   const [acero, soluciones, equipo] = await Promise.all([
@@ -296,14 +420,15 @@ async function main() {
     reason: 'Demo: asignacion de equipo a bodega central',
   })
 
-  const [providerCount, supplyCount, projectCount, movementCount] = await Promise.all([
+  const [employeeCount, providerCount, supplyCount, projectCount, movementCount] = await Promise.all([
+    prisma.employee.count(),
     prisma.provider.count(),
     prisma.supply.count(),
     prisma.project.count(),
     prisma.inventoryMovement.count(),
   ])
 
-  console.log(`Datos demo listos: ${providerCount} proveedores, ${supplyCount} insumos, ${projectCount} proyectos, ${movementCount} movimientos.`)
+  console.log(`Datos demo listos: ${employeeCount} empleados, ${providerCount} proveedores, ${supplyCount} insumos, ${projectCount} proyectos, ${movementCount} movimientos.`)
 }
 
 main()
